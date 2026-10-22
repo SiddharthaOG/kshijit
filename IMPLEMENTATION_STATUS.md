@@ -55,6 +55,7 @@ The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.p
 
 ## Future Milestones (Not Started)
 
-- **M1.2+**: Real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface
+- **M1.2**: Real DEM integration, DEM preprocessing, and historical rainfall ingestion pipeline
+- **M1.3+**: Road network integration, alert engine, MapLibre interface
 - Historical flood validation against 2024 Vijayawada event (IoU metrics)
 - Live telemetry and satellite-based flood-extent validation
