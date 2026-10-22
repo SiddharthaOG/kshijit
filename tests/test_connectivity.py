@@ -52,8 +52,9 @@ def test_isolated_low_depression():
     )
     result = compute_flood_extent(elevation, source, water_level=0.5)
     # water_level=0.5 < elevation=1, so no cells should be flooded
-    assert result is not None
     assert result.sum() == 0
+    assert result.shape == (3, 3)
+    assert result.dtype == bool
 
 
 def test_above_threshold_blocks_connectivity():
@@ -98,8 +99,9 @@ def test_source_above_threshold_returns_empty():
     source = np.array([[True, False], [False, False]], dtype=bool)
     result = compute_flood_extent(elevation, source, water_level=3)
     # Source at (0,0) has elevation=5 > 3, so not eligible
-    assert result is not None
     assert result.sum() == 0
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
 
 
 def test_multiple_eligible_sources():
@@ -171,7 +173,6 @@ def test_inf_source_cell_with_max_water_level():
     source = np.array([[True]], dtype=bool)
     result = compute_flood_extent(elevation, source, water_level=np.finfo(float).max)
     # The infinite-elevation source cell must NOT be flooded
-    assert result is not None
     assert result.shape == (1, 1)
     assert not result[0, 0]
 
@@ -231,3 +232,178 @@ def test_input_arrays_unchanged():
 
     assert np.array_equal(elevation, original_elev), "elevation array was modified!"
     assert np.array_equal(source, original_src), "source_mask array was modified!"
+
+
+# =============================================================================
+# Part A hardening: elevation dtype validation
+# =============================================================================
+
+def test_elevation_bool_dtype_raises():
+    """Boolean elevation dtype raises TypeError."""
+    elevation = np.array([[True, False], [False, True]], dtype=bool)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+        compute_flood_extent(elevation, source, water_level=1.0)
+
+
+def test_elevation_complex_dtype_raises():
+    """Complex elevation dtype raises TypeError."""
+    elevation = np.array([[1+2j, 2+3j], [3+4j, 4+5j]], dtype=complex)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+        compute_flood_extent(elevation, source, water_level=5.0)
+
+
+def test_elevation_object_dtype_raises():
+    """Object elevation dtype raises TypeError."""
+    elevation = np.array([[1, 2], [3, 4]], dtype=object)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+        compute_flood_extent(elevation, source, water_level=5.0)
+
+
+def test_elevation_string_dtype_raises():
+    """String elevation dtype raises TypeError."""
+    elevation = np.array([["1", "2"], ["3", "4"]], dtype=str)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+        compute_flood_extent(elevation, source, water_level=5.0)
+
+
+def test_elevation_int8_accepted():
+    """Signed integer elevation dtype (int8) is accepted."""
+    elevation = np.array([[1, 2], [3, 4]], dtype=np.int8)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_elevation_int32_accepted():
+    """Signed integer elevation dtype (int32) is accepted."""
+    elevation = np.array([[1, 2], [3, 4]], dtype=np.int32)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_elevation_uint16_accepted():
+    """Unsigned integer elevation dtype (uint16) is accepted."""
+    elevation = np.array([[1, 2], [3, 4]], dtype=np.uint16)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_elevation_float32_accepted():
+    """Float32 elevation dtype is accepted."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3.0)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_elevation_float64_accepted():
+    """Float64 elevation dtype is accepted."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3.0)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+# =============================================================================
+# Part A hardening: water_level validation
+# =============================================================================
+
+def test_water_level_bool_raises():
+    """Boolean water_level raises TypeError."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="water_level must be a real number, not bool"):
+        compute_flood_extent(elevation, source, water_level=True)
+
+
+def test_water_level_complex_raises():
+    """Complex water_level raises TypeError."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="water_level must be a real number"):
+        compute_flood_extent(elevation, source, water_level=1+2j)
+
+
+def test_water_level_string_raises():
+    """String water_level raises TypeError."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="water_level must be a real number"):
+        compute_flood_extent(elevation, source, water_level="3.0")
+
+
+def test_water_level_none_raises():
+    """None water_level raises TypeError."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(TypeError, match="water_level must be a real number"):
+        compute_flood_extent(elevation, source, water_level=None)
+
+
+def test_water_level_numpy_int32_accepted():
+    """NumPy int32 water_level is accepted."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=np.int32(3))
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_water_level_numpy_float64_accepted():
+    """NumPy float64 water_level is accepted."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=np.float64(3.0))
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_water_level_python_int_accepted():
+    """Python int water_level is accepted."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_water_level_python_float_accepted():
+    """Python float water_level is accepted."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3.0)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+# =============================================================================
+# Valid integer and floating-point elevation inputs
+# =============================================================================
+
+def test_elevation_int16_accepted():
+    """Signed integer elevation dtype (int16) is accepted."""
+    elevation = np.array([[1, 2], [3, 4]], dtype=np.int16)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
+
+
+def test_elevation_uint8_accepted():
+    """Unsigned integer elevation dtype (uint8) is accepted."""
+    elevation = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=3)
+    assert result.shape == (2, 2)
+    assert result.dtype == bool
