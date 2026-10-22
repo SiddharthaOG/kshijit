@@ -40,7 +40,7 @@
 | `src/kshitij_model/__init__.py` | ✅ Created | Yes |
 | `src/kshitij_model/connectivity.py` | ✅ Created | Yes |
 | `tests/test_connectivity.py` | ✅ Created | Yes |
-| Test suite (21 tests) | ✅ All passed | Yes |
+| Test suite | ✅ Written and reviewed | Yes |
 
 ## Known Constraints
 
