@@ -50,7 +50,10 @@ def compute_flood_extent(
     ------
     TypeError
         If *elevation* or *source_mask* is not a NumPy array, or if they are
-        not 2-D, or if their shapes differ.
+        not 2-D, or if *source_mask* is not Boolean.
+    ValueError
+        If *elevation* and *source_mask* shapes differ, or if *elevation* or
+        *source_mask* is empty, or if *water_level* is not finite.
     ValueError
         If *elevation* or *source_mask* is empty, or if *water_level* is not
         finite.
