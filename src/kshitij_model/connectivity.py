@@ -54,9 +54,6 @@ def compute_flood_extent(
     ValueError
         If *elevation* and *source_mask* shapes differ, or if *elevation* or
         *source_mask* is empty, or if *water_level* is not finite.
-    ValueError
-        If *elevation* or *source_mask* is empty, or if *water_level* is not
-        finite.
     """
     # ---- validate elevation ---------------------------------------------------
     if not isinstance(elevation, np.ndarray):
