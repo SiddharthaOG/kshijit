@@ -70,6 +70,8 @@ def compute_flood_extent(
         raise TypeError(f"source_mask must be 2-D, got {source_mask.ndim}-D array.")
     if source_mask.size == 0:
         raise ValueError("source_mask must be a non-empty array.")
+    if source_mask.dtype != np.bool_:
+        raise TypeError("source_mask must be Boolean.")
     if elevation.shape != source_mask.shape:
         raise ValueError(
             f"elevation and source_mask must have the same shape: "
@@ -86,12 +88,18 @@ def compute_flood_extent(
 
     # ---- treat NaN / inf elevation as invalid (cannot be flooded/traversed) ---
     # NaN propagation: NaN elevations are invalid; they block connectivity.
-    # Mark invalid elevations as definitely above threshold so they are never traversed
     elev_is_invalid = np.isnan(elev) | np.isinf(elev)
-    elev[elev_is_invalid] = water_level + 1.0
 
     # ---- identify eligible source cells: finite elevation AND at or below threshold
-    eligible_sources = src & (elev <= water_level)
+    # Use the original elevation array to avoid sentinel-value issues when
+    # water_level is near the maximum representable finite float.
+    eligible_sources = src & ~elev_is_invalid & (elevation <= water_level)
+
+    # Mark invalid elevations as above threshold so they are never traversed during BFS.
+    # The exact sentinel value doesn't matter as long as it exceeds the water_level.
+    # We use water_level + 1.0, which is safe because invalid elevations are already
+    # excluded from eligible_sources above.
+    elev[elev_is_invalid] = water_level + 1.0
 
     # ---- if no eligible source cells, return all-false mask ------------------
     if not eligible_sources.any():
