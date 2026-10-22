@@ -40,7 +40,7 @@ The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.p
 - Source cells must have finite elevation ≤ water_level to be eligible
 - Boolean dtype enforcement for `source_mask`
 - Input arrays are not mutated
-- All edge cases covered by 16 deterministic unit tests
+- The current test suite covers the documented core behavior and selected edge cases. Additional testing will be added as the model and input pipeline evolve.
 
 ## Known Constraints & Limitations
 
