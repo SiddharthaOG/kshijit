@@ -1,4 +1,11 @@
-# Kshitij — Milestone M0 Implementation Status
+# Kshitij — Implementation Status
+
+## Milestone Overview
+
+| Milestone | Status | Description |
+| --------- | ------ | ----------- |
+| **M0** | ✅ Implemented | Repository & geospatial foundation: Docker Compose, PostgreSQL/PostGIS, smoke test, documentation |
+| **M1.1** | ✅ Implemented | Synthetic-terrain flood-connectivity core: NumPy-based threshold-connectivity model with 4-neighbor BFS, unit-tested |
 
 ## Deliverables and Verification Status
 
@@ -15,40 +22,39 @@
 | `docs/DEVELOPMENT.md` | ✅ Created | Yes |
 | `docs/DATA_SOURCES.md` | ✅ Created | Yes |
 | `tests/` directory | ✅ Created | Yes |
-| Docker Compose + PostgreSQL/PostGIS running | ✅ Not yet run | — |
-| Smoke test against running DB | ✅ Not yet run | — |
-| QGIS connection setup | ✅ Documented | — |
-
-## Known Constraints
-
-- PostGIS image pinned to `postgis/postgis:3.5-3.5-alpine` (not `latest`)
-- Database credentials are via environment variables only — never hard-coded
-- `.env` is gitignored
-- Smoke test retries 12 times at 5-second intervals for DB readiness
-- No flood-prediction model implemented (M0 foundation only)
-- Mandatory disclaimer included in README
-
-## Next Milestone
-
-- **M1:** Thin slice end-to-end — decoupled Python package for historical rainfall parsing, one DEM tile, static map layout.
-- **M1.1:** Synthetic-terrain flood-connectivity core — NumPy-based threshold-connectivity model with 4-neighbor BFS, testable in isolation.
-
-## M1.1 Deliverables
-
-| Deliverable | Status | Verified |
-| ----------- | ------ | -------- |
 | `src/kshitij_model/__init__.py` | ✅ Created | Yes |
 | `src/kshitij_model/connectivity.py` | ✅ Created | Yes |
 | `tests/test_connectivity.py` | ✅ Created | Yes |
 | Test suite (16 tests) | ✅ All passed | Yes |
+| Docker Compose + PostgreSQL/PostGIS running | ⏳ Not yet run | — |
+| Smoke test against running DB | ⏳ Not yet run | — |
+| QGIS connection setup | ✅ Documented | — |
 
-## Known Constraints
+## M1.1 Implementation Details
+
+The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.py`) provides:
+
+- `compute_flood_extent(elevation, source_mask, water_level)` — threshold-connectivity flood model
+- 4-neighbor (cardinal) connectivity; diagonal contact alone does not connect
+- Invalid elevations (NaN, ±inf) excluded from flooding and act as barriers
+- Source cells must have finite elevation ≤ water_level to be eligible
+- Boolean dtype enforcement for `source_mask`
+- Input arrays are not mutated
+- All edge cases covered by 16 deterministic unit tests
+
+## Known Constraints & Limitations
 
 - PostGIS image pinned to `postgis/postgis:3.5-3.5-alpine` (not `latest`)
-- Database credentials are via environment variables only — never hard-coded
+- Database credentials via environment variables only — never hard-coded
 - `.env` is gitignored
 - Smoke test retries 12 times at 5-second intervals for DB readiness
-- No flood-prediction model implemented (M0 foundation only)
-- Mandatory disclaimer included in README
-- M1.1 synthetic-terrain model is standalone NumPy-based; not a hydraulic simulation
-- Real DEM integration remains planned for future milestones
+- **This is a research prototype — not a hydraulic simulation or validated flood forecast**
+- **This application is for simulation and research purposes only — not for operational safety use**
+- M1.1 model is standalone NumPy-based; does not use real DEM, rainfall, or road data
+- Real DEM integration and historical flood validation remain planned for future milestones
+
+## Future Milestones (Not Started)
+
+- **M1.2+**: Real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface
+- Historical flood validation against 2024 Vijayawada event (IoU metrics)
+- Live telemetry and satellite-based flood-extent validation
