@@ -87,7 +87,7 @@ def compute_flood_extent(
     src = source_mask.copy()
 
     # ---- treat NaN / inf elevation as invalid (cannot be flooded/traversed) ---
-    # NaN propagation: NaN elevations are invalid; they block connectivity.
+    # NaN and ±inf elevations are invalid; they block connectivity.
     elev_is_invalid = np.isnan(elev) | np.isinf(elev)
 
     # ---- identify eligible source cells: finite elevation AND at or below threshold
@@ -96,9 +96,8 @@ def compute_flood_extent(
     eligible_sources = src & ~elev_is_invalid & (elevation <= water_level)
 
     # Mark invalid elevations as above threshold so they are never traversed during BFS.
-    # The exact sentinel value doesn't matter as long as it exceeds the water_level.
-    # We use water_level + 1.0, which is safe because invalid elevations are already
-    # excluded from eligible_sources above.
+    # The sentinel value is a pragmatic choice; invalid cells are already excluded
+    # from eligible_sources and the BFS neighbor check also guards against them.
     elev[elev_is_invalid] = water_level + 1.0
 
     # ---- if no eligible source cells, return all-false mask ------------------
