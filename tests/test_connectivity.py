@@ -1,6 +1,11 @@
-"""Deterministic tests for ``kshitij_model.connectivity.compute_flood_extent``."""
+"""Deterministic tests for ``kshitij_model.connectivity.compute_flood_extent``.
+
+Uses ``pytest.raises`` for expected-exception tests and direct Boolean
+assertions (no ``is True`` / ``is False`` on NumPy scalars).
+"""
 
 import numpy as np
+import pytest
 
 from kshitij_model.connectivity import compute_flood_extent
 
@@ -28,11 +33,12 @@ def test_simple_connected_corridor():
         dtype=bool,
     )
     result = compute_flood_extent(elevation, source, water_level=3)
-    # All cells with elevation <= 3 and connected to the source at (1,1) should be flooded
-    assert result[2, 2] is True, "Center cell (elevation=1) should be flooded"
-    assert result[1, 1] is True, "Source cell should be flooded"
+    # Center cell (elevation=1) should be flooded
+    assert result[2, 2]
+    # Source cell should be flooded
+    assert result[1, 1]
     # Top row should not be flooded (elevation=5 > threshold=3)
-    assert result[0, :].any() is False, "Top row should not be flooded"
+    assert not result[0, :].any()
 
 
 def test_isolated_low_depression():
@@ -47,7 +53,7 @@ def test_isolated_low_depression():
     result = compute_flood_extent(elevation, source, water_level=0.5)
     # water_level=0.5 < elevation=1, so no cells should be flooded
     assert result is not None
-    assert result.sum() == 0, "No cells should flood when threshold < elevation"
+    assert result.sum() == 0
 
 
 def test_above_threshold_blocks_connectivity():
@@ -60,33 +66,29 @@ def test_above_threshold_blocks_connectivity():
         dtype=bool,
     )
     result = compute_flood_extent(elevation, source, water_level=3)
-    # Source at (0,0) has elevation=2 <= 3, but the center cell (elevation=5) blocks
-    # connectivity to the rest. Since the source itself is eligible, it should be flooded.
-    assert result[0, 0] is True, "Eligible source cell should be flooded"
-    # No other cells should be flooded since center blocks
-    assert result.sum() == 1, "Only the source cell should be flooded"
+    # Source at (0,0) has elevation=2 <= 3, so it is eligible and flooded
+    assert result[0, 0]
+    # No other cells should be flooded since center (elevation=5) blocks
+    assert result.sum() == 1
 
 
-def test_diagonal_not_connected_4_neighbor():
-    """Diagonally touching cells are not connected under 4-neighbor rules."""
-    elevation = np.array([[1, 0, 1]], dtype=float)
-    source = np.array([[True, False, True]], dtype=bool)
+def test_diagonal_only_no_connectivity():
+    """Diagonally positioned low cell is NOT connected under 4-neighbor rules.
+
+    Elevation ``[[1, 5], [5, 1]]`` with source at (0,0) and water_level=1:
+    - Source cell (0,0) elevation=1 <= threshold, so it is flooded.
+    - Cell (1,1) elevation=1 is diagonally adjacent but not connected via
+      4-neighbor (up/down/left/right) path because the orthogonal cells
+      (0,1) and (1,0) have elevation=5 > threshold, blocking passage.
+    - Therefore (1,1) must remain unflooded.
+    """
+    elevation = np.array([[1, 5], [5, 1]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
     result = compute_flood_extent(elevation, source, water_level=1)
-    # Left source at (0,0) can reach nothing via 4-neighbors since (0,1) has elev=0
-    # but is not a source. Right source at (0,2) similarly.
-    # With only 1 row, the middle cell (0,1) is elev=0 <= 1 but not a source.
-    # Neither source has a 4-neighbor path to the other.
-    # Left source flooded: True (it's eligible)
-    # Right source flooded: True (it's eligible)
-    # Middle cell: should NOT be flooded since it's not connected to either source via 4-neighbors
-    # Actually, let's think: left source at (0,0), middle at (0,1) has elev=0 <= 1,
-    # but the BFS from left source goes to (0,1) since it's a valid 4-neighbor.
-    # Then from (0,1) it can go to (0,2) since elev=1 <= 1.
-    # Hmm, this is tricky. Let me just check the actual behavior.
-    print(f"  Diagonal test result:\n{result}")
-    # The key assertion: left source flooded, right source flooded
-    assert result[0, 0] is True, "Left source should be flooded"
-    assert result[0, 2] is True, "Right source should be flooded"
+    # Source cell should be flooded
+    assert result[0, 0]
+    # Diagonally positioned cell must NOT be flooded (blocked by above-threshold orthogonals)
+    assert not result[1, 1]
 
 
 def test_source_above_threshold_returns_empty():
@@ -96,7 +98,7 @@ def test_source_above_threshold_returns_empty():
     result = compute_flood_extent(elevation, source, water_level=3)
     # Source at (0,0) has elevation=5 > 3, so not eligible
     assert result is not None
-    assert result.sum() == 0, "Source above threshold yields empty flood mask"
+    assert result.sum() == 0
 
 
 def test_multiple_eligible_sources():
@@ -109,18 +111,17 @@ def test_multiple_eligible_sources():
         dtype=bool,
     )
     result = compute_flood_extent(elevation, source, water_level=1)
-    # All perimeter cells have elevation=1 <= 1 and should be connected
-    # through the grid. The center (elevation=5) should not be flooded.
-    assert result[0, 0] is True, "Top-left source should be flooded"
-    assert result[0, 1] is True, "Top-middle should be flooded"
-    assert result[0, 2] is True, "Top-right should be flooded"
-    assert result[1, 0] is True, "Middle-left should be flooded"
-    assert result[1, 2] is True, "Middle-right should be flooded"
-    assert result[2, 0] is True, "Bottom-left should be flooded"
-    assert result[2, 1] is True, "Bottom-middle should be flooded"
-    assert result[2, 2] is True, "Bottom-right source should be flooded"
+    # Perimeter cells have elevation=1 <= 1 and should be connected
+    assert result[0, 0]
+    assert result[0, 1]
+    assert result[0, 2]
+    assert result[1, 0]
+    assert result[1, 2]
+    assert result[2, 0]
+    assert result[2, 1]
+    assert result[2, 2]
     # Center should NOT be flooded (elevation=5 > 1)
-    assert result[1, 1] is False, "Center should not be flooded"
+    assert not result[1, 1]
 
 
 def test_nan_blocks_connectivity():
@@ -128,67 +129,58 @@ def test_nan_blocks_connectivity():
     elevation = np.array([[1, np.nan, 1]], dtype=float)
     source = np.array([[True, False, True]], dtype=bool)
     result = compute_flood_extent(elevation, source, water_level=2)
-    # NaN at (0,1) blocks connectivity between left and right
-    assert result[0, 0] is True, "Left source should be flooded"
-    assert result[0, 2] is True, "Right source should be flooded"
+    # Left and right sources should be flooded
+    assert result[0, 0]
+    assert result[0, 2]
     # The NaN cell itself should not be flooded
-    assert result[0, 1] is False, "NaN cell should not be flooded"
+    assert not result[0, 1]
+
+
+def test_inf_blocks_connectivity():
+    """Positive infinity elevation cells block connectivity."""
+    elevation = np.array([[1, np.inf, 1]], dtype=float)
+    source = np.array([[True, False, True]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=2)
+    # Left and right sources should be flooded
+    assert result[0, 0]
+    assert result[0, 2]
+    # The inf cell itself should not be flooded
+    assert not result[0, 1]
 
 
 def test_invalid_dimensions_raise():
     """Non-2D arrays raise TypeError."""
-    try:
+    with pytest.raises(TypeError, match("elevation must be a NumPy array")):
         compute_flood_extent(np.array([1, 2, 3]), np.array([[True, False]]), water_level=1)
-        assert False, "Should have raised TypeError for non-2D elevation"
-    except TypeError:
-        pass
 
-    try:
+    with pytest.raises(TypeError, match("source_mask must be a NumPy array")):
         compute_flood_extent(np.array([[1, 2], [3, 4]]), np.array([True, False]), water_level=1)
-        assert False, "Should have raised TypeError for non-2D source_mask"
-    except TypeError:
-        pass
 
 
 def test_mismatched_shapes_raise():
     """Arrays with different shapes raise ValueError."""
-    try:
+    with pytest.raises(ValueError, match("must have the same shape")):
         elevation = np.array([[1, 2], [3, 4]], dtype=float)
-        source = np.array([[True, False, False]], dtype=bool)  # 3 cols vs 2 cols
+        source = np.array([[True, False, False]], dtype=bool)
         compute_flood_extent(elevation, source, water_level=1)
-        assert False, "Should have raised ValueError for mismatched shapes"
-    except ValueError:
-        pass
 
 
 def test_empty_grid_raises():
     """Empty arrays raise ValueError."""
-    try:
+    with pytest.raises(ValueError, match("non-empty")):
         compute_flood_extent(np.array([]).reshape(0, 0), np.array([[False]]), water_level=1)
-        assert False, "Should have raised ValueError for empty elevation"
-    except ValueError:
-        pass
 
-    try:
+    with pytest.raises(ValueError, match("non-empty")):
         compute_flood_extent(np.array([[1, 2]]), np.array([]).reshape(0, 0), water_level=1)
-        assert False, "Should have raised ValueError for empty source_mask"
-    except ValueError:
-        pass
 
 
 def test_non_finite_water_level_raises():
     """Non-finite water_level raises ValueError."""
-    try:
+    with pytest.raises(ValueError, match("must be a finite number")):
         compute_flood_extent(np.array([[1.0]]), np.array([[True]]), water_level=float("nan"))
-        assert False, "Should have raised ValueError for NaN water_level"
-    except ValueError:
-        pass
 
-    try:
+    with pytest.raises(ValueError, match("must be a finite number")):
         compute_flood_extent(np.array([[1.0]]), np.array([[True]]), water_level=float("inf"))
-        assert False, "Should have raised ValueError for inf water_level"
-    except ValueError:
-        pass
 
 
 def test_input_arrays_unchanged():
