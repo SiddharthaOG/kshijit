@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgis/postgis:3.5-3.5-alpine
+    container_name: kshitij-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kshitij_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_must_change}
+      POSTGRES_DB: ${POSTGRES_DB:-kshitij_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kshitij_dev} -d ${POSTGRES_DB:-kshitij_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+    driver: local

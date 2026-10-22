@@ -1,0 +1,5 @@
+# Kshitij — Minimal runtime requirements for Milestone M0
+# This is kept purposefully light; additional dependencies added as features evolve.
+
+psycopg2-binary>=2.9.9
+dnspython>=2.6.0

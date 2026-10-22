@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.venv/
+.env
+venv/
+.env.local
+
+# Docker
+docker-compose/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Render / deployment
+render.yaml
