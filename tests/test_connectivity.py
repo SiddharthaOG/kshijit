@@ -315,6 +315,16 @@ def test_elevation_float64_accepted():
     assert result.dtype == bool
 
 
+def test_elevation_longdouble_accepted():
+    """Longdouble (extended precision) elevation dtype is accepted where available."""
+    if hasattr(np, 'longdouble'):
+        elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.longdouble)
+        source = np.array([[True, False], [False, False]], dtype=bool)
+        result = compute_flood_extent(elevation, source, water_level=3.0)
+        assert result.shape == (2, 2)
+        assert result.dtype == bool
+
+
 # =============================================================================
 # Part A hardening: water_level validation
 # =============================================================================
@@ -385,6 +395,24 @@ def test_water_level_python_float_accepted():
     result = compute_flood_extent(elevation, source, water_level=3.0)
     assert result.shape == (2, 2)
     assert result.dtype == bool
+
+
+def test_water_level_numpy_longdouble_accepted():
+    """NumPy longdouble water_level is accepted where available."""
+    if hasattr(np, 'longdouble'):
+        elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+        source = np.array([[True, False], [False, False]], dtype=bool)
+        result = compute_flood_extent(elevation, source, water_level=np.longdouble(3.0))
+        assert result.shape == (2, 2)
+        assert result.dtype == bool
+
+
+def test_water_level_overflow_raises():
+    """Extremely large Python int water_level raises ValueError (not OverflowError)."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    with pytest.raises(ValueError, match="too large to convert to float"):
+        compute_flood_extent(elevation, source, water_level=10**400)
 
 
 # =============================================================================

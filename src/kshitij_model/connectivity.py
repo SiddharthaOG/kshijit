@@ -37,7 +37,10 @@ def _validate_water_level(water_level) -> float:
             f"water_level must be a real number (int or float), got {type(water_level).__name__}."
         )
     # Convert to Python float for consistency
-    wl = float(water_level)
+    try:
+        wl = float(water_level)
+    except OverflowError:
+        raise ValueError("water_level is too large to convert to float.")
     if not np.isfinite(wl):
         raise ValueError("water_level must be a finite number (not NaN or inf).")
     return wl
