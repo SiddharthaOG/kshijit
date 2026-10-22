@@ -161,6 +161,30 @@ def test_negative_inf_blocks_connectivity():
     assert not result[0, 1]
 
 
+def test_inf_source_cell_with_max_water_level():
+    """An infinite elevation source cell is never flooded, even at max water level.
+
+    Uses np.finfo(float).max as water_level to test the edge case where
+    water_level + 1.0 does not produce a larger finite value.
+    """
+    elevation = np.array([[np.inf]], dtype=float)
+    source = np.array([[True]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=np.finfo(float).max)
+    # The infinite-elevation source cell must NOT be flooded
+    assert result is not None
+    assert result.shape == (1, 1)
+    assert not result[0, 0]
+
+
+def test_invalid_source_mask_dtype_raises():
+    """Non-Boolean source_mask raises TypeError."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    # Integer array instead of Boolean
+    source = np.array([[1, 0], [0, 1]], dtype=int)
+    with pytest.raises(TypeError, match="source_mask must be Boolean"):
+        compute_flood_extent(elevation, source, water_level=5.0)
+
+
 def test_invalid_dimensions_raise():
     """Non-2D arrays raise TypeError."""
     with pytest.raises(TypeError):
