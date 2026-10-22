@@ -1,8 +1,10 @@
 # Kshitij — Flood Risk Decision-Support Prototype
 
-**Milestone M0: Repository and Geospatial Foundation**
+**Milestone M0: Repository and Geospatial Foundation** — ✅ Complete
 
-**Status:** planning (nothing implemented yet)
+**Milestone M1.1: Synthetic-Terrain Flood-Connectivity Core** — ✅ Complete
+
+**Status:** M0 and M1.1 implemented and tested
 
 ---
 
@@ -139,6 +141,7 @@ kshitij/
 ├── .gitignore
 ├── .env.example
 ├── compose.yaml
+├── pyproject.toml
 │
 ├── Dockerfile
 │
@@ -147,11 +150,17 @@ kshitij/
 ├── scripts/
 │   └── smoke_test.py
 │
+├── src/
+│   └── kshitij_model/
+│       ├── __init__.py
+│       └── connectivity.py
+│
 ├── docs/
 │   ├── DEVELOPMENT.md
 │   └── DATA_SOURCES.md
 │
 ├── tests/
+│   └── test_connectivity.py
 │
 └── README.md
 ```
