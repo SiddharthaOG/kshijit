@@ -126,8 +126,8 @@ Copy `.env.example` to `.env` and adjust:
 
 | Category | Status |
 | -------- | -------- |
-| **Implemented** | Repository structure, Docker Compose, PostgreSQL/PostGIS, smoke test, documentation |
-| **Planned** | Flood model, rainfall ingestion, road network, alert engine, MapLibre interface |
+| **Implemented** | Repository structure, Docker Compose, PostgreSQL/PostGIS, smoke test, documentation, M1.1 synthetic-terrain flood-connectivity core with BFS and 4-neighbor rules |
+| **Planned** | Flood model with real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface |
 | **Not Started** | — |
 
 ---
