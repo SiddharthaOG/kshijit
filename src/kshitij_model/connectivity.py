@@ -7,13 +7,48 @@ using 4-neighbor (cardinal) connectivity.
 
 from __future__ import annotations
 
+from numbers import Real
+
 import numpy as np
+
+
+def _is_supported_numeric_dtype(dtype: np.dtype) -> bool:
+    """Return True if dtype is a supported real numeric type.
+
+    Supported: integer (signed/unsigned) and real floating-point dtypes.
+    Rejected: bool, complex, object, string, datetime, timedelta, void.
+    """
+    return dtype.kind in ("i", "u", "f")  # signed int, unsigned int, float
+
+
+def _validate_water_level(water_level) -> float:
+    """Validate and coerce water_level to a finite Python float.
+
+    Accepts Python int/float, NumPy integer/floating scalars.
+    Rejects: strings, None, complex, bool, non-finite values.
+    """
+    # Reject bool explicitly (bool is subclass of int in Python)
+    if isinstance(water_level, bool):
+        raise TypeError("water_level must be a real number, not bool.")
+    # Must be a real number (int, float, np.integer, np.floating)
+    if not isinstance(water_level, Real):
+        raise TypeError(
+            f"water_level must be a real number (int or float), got {type(water_level).__name__}."
+        )
+    # Convert to Python float for consistency
+    try:
+        wl = float(water_level)
+    except OverflowError:
+        raise ValueError("water_level is too large to convert to float.")
+    if not np.isfinite(wl):
+        raise ValueError("water_level must be a finite number (not NaN or inf).")
+    return wl
 
 
 def compute_flood_extent(
     elevation: np.ndarray,
     source_mask: np.ndarray,
-    water_level: float,
+    water_level,
 ) -> np.ndarray:
     """Compute flood extent using threshold connectivity.
 
@@ -28,13 +63,16 @@ def compute_flood_extent(
     Parameters
     ----------
     elevation:
-        2-D NumPy array of terrain elevations.  NaN and ``inf`` are treated
-        as invalid terrain that cannot be flooded or traversed.
+        2-D NumPy array of terrain elevations with a supported numeric dtype
+        (integer or real floating-point). NaN and ``inf`` are treated as
+        invalid terrain that cannot be flooded or traversed.
     source_mask:
-        2-D boolean NumPy array of the same shape as *elevation*.  True
+        2-D boolean NumPy array of the same shape as *elevation*. True
         marks cells that are designated as river-source cells.
     water_level:
-        Water-level threshold.  Must be finite (not NaN or ``inf``).
+        Water-level threshold. Must be a finite real number (int or float;
+        NumPy integer/floating scalars accepted). Must not be NaN, inf,
+        -inf, bool, complex, string, or None.
 
         A source cell is eligible only if its terrain is valid (finite) and
         its elevation is at or below *water_level*.
@@ -42,7 +80,7 @@ def compute_flood_extent(
     Returns
     -------
     flooded:
-        2-D boolean NumPy array of the same shape as the inputs.  True marks
+        2-D boolean NumPy array of the same shape as the inputs. True marks
         cells that are flooded (i.e. connected to an eligible source cell
         through cells whose elevation is at or below the threshold).
 
@@ -50,7 +88,9 @@ def compute_flood_extent(
     ------
     TypeError
         If *elevation* or *source_mask* is not a NumPy array, or if they are
-        not 2-D, or if *source_mask* is not Boolean.
+        not 2-D, or if *source_mask* is not Boolean, or if *elevation* dtype
+        is not a supported numeric type, or if *water_level* is not a real
+        scalar (e.g., string, None, complex, bool).
     ValueError
         If *elevation* and *source_mask* shapes differ, or if *elevation* or
         *source_mask* is empty, or if *water_level* is not finite.
@@ -62,6 +102,11 @@ def compute_flood_extent(
         raise TypeError(f"elevation must be 2-D, got {elevation.ndim}-D array.")
     if elevation.size == 0:
         raise ValueError("elevation must be a non-empty array.")
+    if not _is_supported_numeric_dtype(elevation.dtype):
+        raise TypeError(
+            f"elevation must have a supported numeric dtype (integer or real float), "
+            f"got {elevation.dtype}."
+        )
 
     # ---- validate source_mask -------------------------------------------------
     if not isinstance(source_mask, np.ndarray):
@@ -79,8 +124,7 @@ def compute_flood_extent(
         )
 
     # ---- validate water_level -------------------------------------------------
-    if not np.isfinite(water_level):
-        raise ValueError("water_level must be a finite number (not NaN or inf).")
+    water_level = _validate_water_level(water_level)
 
     # ---- work on copies so we don't modify caller's arrays --------------------
     elev = elevation.copy()
@@ -125,10 +169,14 @@ def compute_flood_extent(
         # Explore 4 neighbors: up, down, left, right
         for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             nr, nc = r + dr, c + dc
-            if 0 <= nr < rows and 0 <= nc < cols and not flooded[nr, nc]:
-                # Cell is floodable only if its elevation is valid and at or below threshold
-                if not elev_is_invalid[nr, nc] and elev[nr, nc] <= water_level:
-                    flooded[nr, nc] = True
-                    queue.append((nr, nc))
+            if (
+                0 <= nr < rows
+                and 0 <= nc < cols
+                and not flooded[nr, nc]
+                and not elev_is_invalid[nr, nc]
+                and elev[nr, nc] <= water_level
+            ):
+                flooded[nr, nc] = True
+                queue.append((nr, nc))
 
     return flooded
