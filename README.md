@@ -30,7 +30,7 @@ Kshitij is a **research prototype** designed to help a human operator assess pot
 **Current capabilities (implemented):**
 - Synthetic-terrain flood-connectivity model with 4-neighbor BFS (`src/kshitij_model/connectivity.py`)
 - Strict input validation (elevation dtype, water_level type, source_mask Boolean)
-- 38 automated tests covering connectivity, edge cases, and input validation
+- 42 automated tests covering connectivity, edge cases, and input validation
 - Docker Compose configuration for PostgreSQL/PostGIS with health checks
 - Smoke test script for database connectivity and PostGIS verification
 
@@ -64,8 +64,8 @@ Kshitij is a **research prototype** designed to help a human operator assess pot
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/SiddharthaOG/kshijit
-cd kshitij
+git clone https://github.com/SiddharthaOG/kshijit.git kshijit
+cd kshijit
 ```
 
 ### 2. Python development setup (recommended for testing)
@@ -92,16 +92,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
-This starts:
-- PostgreSQL/PostGIS service (`db`) with health checks
-- Wait for database to be ready, then runs the smoke test automatically via the `smoke-test` service
+This starts the PostgreSQL/PostGIS service (`db`) with health checks.
 
-### 5. Run smoke test manually (after database is healthy)
+### 5. Run smoke test (after database is healthy)
 
 ```bash
-# Run smoke test against running database
+# Run smoke test against running database (exits with status code)
 docker compose run --rm smoke-test
 ```
+
+The smoke test runs as a one-off job. Its exit code indicates success (0) or failure (non-zero). Check the output for "All checks passed" or specific error messages.
 
 ### 6. Inspect with QGIS (optional)
 
@@ -151,7 +151,8 @@ Copy `.env.example` to `.env` and adjust:
 | Issue | Resolution |
 | -------- | ----------- |
 | `db` service won't start | Check Docker resources; ensure no other service occupies port 5432 on 127.0.0.1 |
-| Smoke test fails | Verify `.env` values; check `docker compose logs db` for startup errors |
+| Smoke test fails | Verify `.env` values; check `docker compose logs db` and `docker compose logs smoke-test` for errors |
+| Smoke test not running | Run `docker compose run --rm smoke-test` manually after `db` is healthy |
 | QGIS can't connect | Confirm `db` service is running; verify `.env` credentials; use host `127.0.0.1` |
 | `psycopg2` import error in tests | Run `pip install -e ".[test]"` to install test dependencies |
 | Python tests fail | Ensure virtual environment is activated and `pip install -e ".[test]"` was run |
@@ -170,11 +171,11 @@ python -m pytest -v
 python -m pytest --cov=kshitij_model --cov-report=term-missing
 ```
 
-**Current test coverage:** 38 tests covering:
+**Current test coverage:** 42 tests covering:
 - Core connectivity algorithm (corridors, isolated depressions, barriers, diagonal rules)
 - Edge cases (NaN, ±inf elevation barriers, multiple sources, max water level)
 - Input validation (dtype, shape, water_level type, overflow)
-- Property tests (monotonicity, flooded-cell validity, input immutability)
+- Property tests (monotonicity, flooded-cell validity, input immutability, water-level precision)
 
 ---
 

@@ -5,7 +5,7 @@
 | Milestone | Status | Description |
 | --------- | ------ | ----------- |
 | **M0** | ✅ Configuration complete | Repository, Docker Compose, PostgreSQL/PostGIS config, documentation |
-| **M1.1** | ✅ Implemented & tested | Synthetic-terrain flood-connectivity core: NumPy-based threshold-connectivity model with 4-neighbor BFS, 38 tests pass |
+| **M1.1** | ✅ Implemented & tested | Synthetic-terrain flood-connectivity core: NumPy-based threshold-connectivity model with 4-neighbor BFS, 42 tests pass |
 | **M1.2** | 📋 Planned | DEM integration, preprocessing, historical rainfall ingestion |
 
 ## Deliverables and Verification Status
@@ -26,7 +26,7 @@
 | `src/kshitij_model/__init__.py` | ✅ Created | Yes |
 | `src/kshitij_model/connectivity.py` | ✅ Created | Yes |
 | `tests/test_connectivity.py` | ✅ Created | Yes |
-| **Test suite (38 tests)** | ✅ All passed | Yes |
+| **Test suite (42 tests)** | ✅ All passed | Yes |
 | Docker Compose + PostgreSQL/PostGIS running | ⏳ Not yet run | — |
 | Smoke test against running DB | ⏳ Not yet run | — |
 | QGIS connection setup | ✅ Documented | — |
@@ -43,7 +43,7 @@ The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.p
 - Strict elevation dtype validation (rejects bool, complex, object, string)
 - Strict water_level validation (rejects bool, complex, string, None, overflow)
 - Input arrays are not mutated
-- Test suite covers documented core behavior and selected edge cases
+- Test suite (42 tests) covers documented core behavior, edge cases, and invariants (monotonicity, flooded-cell validity, input immutability, water-level precision)
 
 ## Known Constraints & Limitations
 
