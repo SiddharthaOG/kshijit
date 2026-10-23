@@ -7,8 +7,9 @@ using 4-neighbor (cardinal) connectivity.
 
 from __future__ import annotations
 
-import numpy as np
 from numbers import Real
+
+import numpy as np
 
 
 def _is_supported_numeric_dtype(dtype: np.dtype) -> bool:
@@ -17,9 +18,7 @@ def _is_supported_numeric_dtype(dtype: np.dtype) -> bool:
     Supported: integer (signed/unsigned) and real floating-point dtypes.
     Rejected: bool, complex, object, string, datetime, timedelta, void.
     """
-    if dtype.kind in ('i', 'u', 'f'):  # signed int, unsigned int, float
-        return True
-    return False
+    return dtype.kind in ("i", "u", "f")  # signed int, unsigned int, float
 
 
 def _validate_water_level(water_level) -> float:
@@ -170,10 +169,14 @@ def compute_flood_extent(
         # Explore 4 neighbors: up, down, left, right
         for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             nr, nc = r + dr, c + dc
-            if 0 <= nr < rows and 0 <= nc < cols and not flooded[nr, nc]:
-                # Cell is floodable only if its elevation is valid and at or below threshold
-                if not elev_is_invalid[nr, nc] and elev[nr, nc] <= water_level:
-                    flooded[nr, nc] = True
-                    queue.append((nr, nc))
+            if (
+                0 <= nr < rows
+                and 0 <= nc < cols
+                and not flooded[nr, nc]
+                and not elev_is_invalid[nr, nc]
+                and elev[nr, nc] <= water_level
+            ):
+                flooded[nr, nc] = True
+                queue.append((nr, nc))
 
     return flooded

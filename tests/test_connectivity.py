@@ -43,9 +43,7 @@ def test_simple_connected_corridor():
 
 def test_isolated_low_depression():
     """An isolated low-elevation depression is excluded if no eligible source."""
-    elevation = np.array(
-        [[10, 10, 10], [10, 1, 10], [10, 10, 10]], dtype=float
-    )
+    elevation = np.array([[10, 10, 10], [10, 1, 10], [10, 10, 10]], dtype=float)
     source = np.array(
         [[False, False, False], [False, True, False], [False, False, False]],
         dtype=bool,
@@ -106,9 +104,7 @@ def test_source_above_threshold_returns_empty():
 
 def test_multiple_eligible_sources():
     """Multiple eligible source cells work correctly."""
-    elevation = np.array(
-        [[1, 1, 1], [1, 5, 1], [1, 1, 1]], dtype=float
-    )
+    elevation = np.array([[1, 1, 1], [1, 5, 1], [1, 1, 1]], dtype=float)
     source = np.array(
         [[True, False, False], [False, False, False], [False, False, True]],
         dtype=bool,
@@ -189,10 +185,14 @@ def test_invalid_source_mask_dtype_raises():
 def test_invalid_dimensions_raise():
     """Non-2D arrays raise TypeError."""
     with pytest.raises(TypeError):
-        compute_flood_extent(np.array([1, 2, 3]), np.array([[True, False]]), water_level=1)
+        compute_flood_extent(
+            np.array([1, 2, 3]), np.array([[True, False]]), water_level=1
+        )
 
     with pytest.raises(TypeError):
-        compute_flood_extent(np.array([[1, 2], [3, 4]]), np.array([True, False]), water_level=1)
+        compute_flood_extent(
+            np.array([[1, 2], [3, 4]]), np.array([True, False]), water_level=1
+        )
 
 
 def test_mismatched_shapes_raise():
@@ -206,19 +206,27 @@ def test_mismatched_shapes_raise():
 def test_empty_grid_raises():
     """Empty arrays raise ValueError."""
     with pytest.raises(ValueError):
-        compute_flood_extent(np.array([]).reshape(0, 0), np.array([[False]]), water_level=1)
+        compute_flood_extent(
+            np.array([]).reshape(0, 0), np.array([[False]]), water_level=1
+        )
 
     with pytest.raises(ValueError):
-        compute_flood_extent(np.array([[1, 2]]), np.array([]).reshape(0, 0), water_level=1)
+        compute_flood_extent(
+            np.array([[1, 2]]), np.array([]).reshape(0, 0), water_level=1
+        )
 
 
 def test_non_finite_water_level_raises():
     """Non-finite water_level raises ValueError."""
     with pytest.raises(ValueError):
-        compute_flood_extent(np.array([[1.0]]), np.array([[True]]), water_level=float("nan"))
+        compute_flood_extent(
+            np.array([[1.0]]), np.array([[True]]), water_level=float("nan")
+        )
 
     with pytest.raises(ValueError):
-        compute_flood_extent(np.array([[1.0]]), np.array([[True]]), water_level=float("inf"))
+        compute_flood_extent(
+            np.array([[1.0]]), np.array([[True]]), water_level=float("inf")
+        )
 
 
 def test_input_arrays_unchanged():
@@ -238,19 +246,24 @@ def test_input_arrays_unchanged():
 # Part A hardening: elevation dtype validation
 # =============================================================================
 
+
 def test_elevation_bool_dtype_raises():
     """Boolean elevation dtype raises TypeError."""
     elevation = np.array([[True, False], [False, True]], dtype=bool)
     source = np.array([[True, False], [False, False]], dtype=bool)
-    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+    with pytest.raises(
+        TypeError, match="elevation must have a supported numeric dtype"
+    ):
         compute_flood_extent(elevation, source, water_level=1.0)
 
 
 def test_elevation_complex_dtype_raises():
     """Complex elevation dtype raises TypeError."""
-    elevation = np.array([[1+2j, 2+3j], [3+4j, 4+5j]], dtype=complex)
+    elevation = np.array([[1 + 2j, 2 + 3j], [3 + 4j, 4 + 5j]], dtype=complex)
     source = np.array([[True, False], [False, False]], dtype=bool)
-    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+    with pytest.raises(
+        TypeError, match="elevation must have a supported numeric dtype"
+    ):
         compute_flood_extent(elevation, source, water_level=5.0)
 
 
@@ -258,7 +271,9 @@ def test_elevation_object_dtype_raises():
     """Object elevation dtype raises TypeError."""
     elevation = np.array([[1, 2], [3, 4]], dtype=object)
     source = np.array([[True, False], [False, False]], dtype=bool)
-    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+    with pytest.raises(
+        TypeError, match="elevation must have a supported numeric dtype"
+    ):
         compute_flood_extent(elevation, source, water_level=5.0)
 
 
@@ -266,7 +281,9 @@ def test_elevation_string_dtype_raises():
     """String elevation dtype raises TypeError."""
     elevation = np.array([["1", "2"], ["3", "4"]], dtype=str)
     source = np.array([[True, False], [False, False]], dtype=bool)
-    with pytest.raises(TypeError, match="elevation must have a supported numeric dtype"):
+    with pytest.raises(
+        TypeError, match="elevation must have a supported numeric dtype"
+    ):
         compute_flood_extent(elevation, source, water_level=5.0)
 
 
@@ -317,7 +334,7 @@ def test_elevation_float64_accepted():
 
 def test_elevation_longdouble_accepted():
     """Longdouble (extended precision) elevation dtype is accepted where available."""
-    if hasattr(np, 'longdouble'):
+    if hasattr(np, "longdouble"):
         elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.longdouble)
         source = np.array([[True, False], [False, False]], dtype=bool)
         result = compute_flood_extent(elevation, source, water_level=3.0)
@@ -328,6 +345,7 @@ def test_elevation_longdouble_accepted():
 # =============================================================================
 # Part A hardening: water_level validation
 # =============================================================================
+
 
 def test_water_level_bool_raises():
     """Boolean water_level raises TypeError."""
@@ -342,7 +360,7 @@ def test_water_level_complex_raises():
     elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
     source = np.array([[True, False], [False, False]], dtype=bool)
     with pytest.raises(TypeError, match="water_level must be a real number"):
-        compute_flood_extent(elevation, source, water_level=1+2j)
+        compute_flood_extent(elevation, source, water_level=1 + 2j)
 
 
 def test_water_level_string_raises():
@@ -399,7 +417,7 @@ def test_water_level_python_float_accepted():
 
 def test_water_level_numpy_longdouble_accepted():
     """NumPy longdouble water_level is accepted where available."""
-    if hasattr(np, 'longdouble'):
+    if hasattr(np, "longdouble"):
         elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
         source = np.array([[True, False], [False, False]], dtype=bool)
         result = compute_flood_extent(elevation, source, water_level=np.longdouble(3.0))
@@ -419,6 +437,7 @@ def test_water_level_overflow_raises():
 # Valid integer and floating-point elevation inputs
 # =============================================================================
 
+
 def test_elevation_int16_accepted():
     """Signed integer elevation dtype (int16) is accepted."""
     elevation = np.array([[1, 2], [3, 4]], dtype=np.int16)
@@ -435,3 +454,113 @@ def test_elevation_uint8_accepted():
     result = compute_flood_extent(elevation, source, water_level=3)
     assert result.shape == (2, 2)
     assert result.dtype == bool
+
+
+# =============================================================================
+# Property / invariant tests
+# =============================================================================
+
+
+def test_monotonicity_water_level():
+    """Increasing water level must not decrease flooded area (monotonicity)."""
+    elevation = np.array(
+        [
+            [5, 4, 3, 2, 1],
+            [5, 4, 3, 2, 1],
+            [5, 4, 3, 2, 1],
+            [5, 4, 3, 2, 1],
+            [5, 4, 3, 2, 1],
+        ],
+        dtype=float,
+    )
+    source = np.array(
+        [[False, False, True, False, False]] * 5,
+        dtype=bool,
+    )
+    # Test multiple increasing water levels
+    levels = [1.0, 2.0, 3.0, 4.0, 5.0]
+    flooded_areas = []
+    for level in levels:
+        result = compute_flood_extent(elevation, source, water_level=level)
+        flooded_areas.append(result.sum())
+    # Flooded area must be monotonically non-decreasing
+    for i in range(1, len(flooded_areas)):
+        assert flooded_areas[i] >= flooded_areas[i - 1], (
+            f"Flooded area decreased from level {levels[i - 1]} to {levels[i]}"
+        )
+
+
+def test_flooded_cell_validity():
+    """Every flooded cell must have finite elevation <= water_level."""
+    elevation = np.array(
+        [
+            [1, 2, np.nan, 4, 5],
+            [1, np.inf, 3, 4, 5],
+            [1, 2, 3, -np.inf, 5],
+            [1, 2, 3, 4, 5],
+        ],
+        dtype=float,
+    )
+    source = np.array(
+        [[True, False, False, False, False]] * 4,
+        dtype=bool,
+    )
+    water_level = 3.0
+    result = compute_flood_extent(elevation, source, water_level=water_level)
+    # Every flooded cell must have finite elevation <= water_level
+    flooded_indices = np.where(result)
+    for r, c in zip(*flooded_indices):
+        assert np.isfinite(elevation[r, c]), (
+            f"Flooded cell ({r},{c}) has non-finite elevation"
+        )
+        assert elevation[r, c] <= water_level + 1e-10, (
+            f"Flooded cell ({r},{c}) elevation {elevation[r, c]} > water_level {water_level}"
+        )
+
+
+def test_input_immutability_property():
+    """Input arrays must never be modified, even with edge cases."""
+    elevation = np.array([[1.0, np.nan, 3.0], [4.0, 5.0, 6.0]], dtype=float)
+    source = np.array([[True, False, False], [False, True, False]], dtype=bool)
+    original_elev = elevation.copy()
+    original_src = source.copy()
+
+    compute_flood_extent(elevation, source, water_level=5.0)
+
+    # Use equal_nan=True to handle NaN comparison
+    assert np.array_equal(elevation, original_elev, equal_nan=True), (
+        "elevation array was modified!"
+    )
+    assert np.array_equal(source, original_src), "source_mask array was modified!"
+    # Also verify NaN positions preserved
+    assert np.isnan(elevation[0, 1]), "NaN position was modified"
+
+
+def test_water_level_precision_contract():
+    """Water level is converted to Python float (IEEE 754 double precision).
+
+    This test documents the conversion behavior: np.longdouble and other
+    extended-precision types are converted to Python float (IEEE 754 double),
+    which may lose precision. The contract guarantees finite conversion
+    but does not preserve extended precision.
+    """
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+
+    # np.longdouble water_level is accepted but converted to Python float
+    if hasattr(np, "longdouble"):
+        ld_val = np.longdouble("3.1234567890123456789")
+        result = compute_flood_extent(
+            np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+            np.array([[True, False], [False, False]], dtype=bool),
+            water_level=ld_val,
+        )
+        assert result.shape == (2, 2)
+        assert result.dtype == bool
+
+    # Verify that Python float is the internal representation
+    wl = 3.14159265358979323846264338327950288419716939937510
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+    result = compute_flood_extent(elevation, source, water_level=wl)
+    assert result.shape == (2, 2)

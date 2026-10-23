@@ -1,29 +1,61 @@
 # Kshitij — Flood Risk Decision-Support Prototype
 
-**Milestone M0: Repository and Geospatial Foundation** — ✅ Complete
+**Milestone M0: Repository and Geospatial Foundation** — Configuration implemented, runtime verification pending  
+**Milestone M1.1: Synthetic-Terrain Flood-Connectivity Core** — Implemented and tested  
 
-**Milestone M1.1: Synthetic-Terrain Flood-Connectivity Core** — ✅ Complete
+**Status:** M0 configuration complete, M1.1 implemented and tested. Runtime verification of Docker/PostGIS pending.
 
-**Status:** M0 and M1.1 implemented and tested
+---
+
+## Current Status Summary
+
+| Component | Status |
+|-----------|--------|
+| Repository structure, configuration, documentation | ✅ Implemented |
+| M1.1 flood-connectivity core (algorithm + tests) | ✅ Implemented & tested (38 tests pass) |
+| Docker Compose + PostgreSQL/PostGIS configuration | ✅ Configured |
+| Docker/PostGIS runtime verification | ⏳ Pending (requires Docker) |
+| Database smoke test | ⏳ Pending (requires Docker) |
+| M1.2+ DEM integration, rainfall, roads, alerting, MapLibre | 📋 Planned |
+
+> **⚠️ This application is for simulation and research purposes only—not for operational safety use.**  
+> It never sends real alerts and does not replace official forecasts from agencies such as IMD and CWC.
 
 ---
 
 ## Project Overview
 
-Kshitij is a prototype that helps a human operator see which areas may flood and which roads may be cut, with graduated, human-confirmed alert levels. It combines terrain, rainfall and road data, shows how fresh each input is and how uncertain the result is, and keeps working (in a reduced mode) when a data feed fails.
+Kshitij is a **research prototype** designed to help a human operator assess potential flood extents and road impacts using terrain, rainfall, and road data. The system combines these inputs with a threshold-connectivity flood model and presents estimates through a graduated, human-confirmed alert framework.
 
-> **⚠️ This application is for simulation and research purposes only—not for operational safety use.**
+**Current capabilities (implemented):**
+- Synthetic-terrain flood-connectivity model with 4-neighbor BFS (`src/kshitij_model/connectivity.py`)
+- Strict input validation (elevation dtype, water_level type, source_mask Boolean)
+- 38 automated tests covering connectivity, edge cases, and input validation
+- Docker Compose configuration for PostgreSQL/PostGIS with health checks
+- Smoke test script for database connectivity and PostGIS verification
+
+**Planned / Not yet implemented:**
+- Real DEM integration and preprocessing (M1.2)
+- Historical rainfall ingestion from Open-Meteo
+- OpenStreetMap road network integration
+- Graduated alert engine with human confirmation workflow
+- MapLibre GL JS map interface
+- Real-world validation against 2024 Vijayawada flood event
+
+> **⚠️ This application is for simulation and research purposes only—not for operational safety use.**  
 > It never sends real alerts and does not replace official forecasts from agencies such as IMD and CWC.
-
-For this milestone, the goal is to establish the development environment and prove that the geospatial database stack works.
 
 ---
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/engine/install/) (with Docker Compose v2+)
+### For Python development and testing (no Docker required)
+- Python 3.12+
 - [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-git)
-- [QGIS](https://qgis.org/en/site/forusers/download.html) (for later visual inspection of PostGIS data)
+
+### For database runtime verification (requires Docker)
+- [Docker](https://docs.docker.com/engine/install/) with Docker Compose v2+
+- [QGIS](https://qgis.org/en/site/forusers/download.html) (optional, for visual inspection of PostGIS data)
 
 ---
 
@@ -32,54 +64,53 @@ For this milestone, the goal is to establish the development environment and pro
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/SiddharthaOG/kshijit
 cd kshitij
 ```
 
-### 2. Copy environment variables
+### 2. Python development setup (recommended for testing)
+
+```bash
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install package in development mode with test dependencies
+pip install -e ".[test]"
+```
+
+### 3. Environment configuration (for Docker)
 
 ```bash
 cp .env.example .env
+# Edit .env as needed. Default values are suitable for local development.
 ```
 
-Edit `.env` as needed. The default values are suitable for local development.
-
-### 3. Start the services
+### 4. Docker services (for database runtime verification)
 
 ```bash
 docker compose up -d
 ```
 
-This starts the PostgreSQL+PostGIS service (`db`) in detached mode.
+This starts:
+- PostgreSQL/PostGIS service (`db`) with health checks
+- Wait for database to be ready, then runs the smoke test automatically via the `smoke-test` service
 
-### 4. Wait for the database to be ready
-
-```bash
-docker compose logs -f db
-```
-
-Wait until you see `ready` in the output (the healthcheck retries for up to 25 seconds).
-
-### 5. Run the smoke test
+### 5. Run smoke test manually (after database is healthy)
 
 ```bash
-docker compose up --abort-on-container-exit smoke-test
+# Run smoke test against running database
+docker compose run --rm smoke-test
 ```
 
-Or, run directly against the running container:
-
-```bash
-docker compose exec db sh -c "python /app/smoke_test.py"
-```
-
-### 6. Inspect with QGIS (optional, for later milestones)
+### 6. Inspect with QGIS (optional)
 
 Connect QGIS to the local PostGIS database:
-- Host: `localhost` (or `127.0.0.1`)
+- Host: `127.0.0.1` (database port published to localhost only)
 - Port: `5432`
-- Database: `kshitij_db`
-- User: `kshitij_dev`
-- Password: (whatever you set in `.env`)
+- Database: `kshitij_db` (or value from `.env`)
+- User: `kshitij_dev` (or value from `.env`)
+- Password: (from `.env`)
 - Check "Enable PostGIS connections"
 
 ---
@@ -93,9 +124,9 @@ Copy `.env.example` to `.env` and adjust:
 | `POSTGRES_USER` | `kshitij_dev` | Database superuser |
 | `POSTGRES_PASSWORD` | `dev_password_must_change` | Database password |
 | `POSTGRES_DB` | `kshitij_db` | Database name |
-| `POSTGRES_HOST` | `db` | Docker Compose service name |
+| `POSTGRES_HOST` | `db` | Docker Compose service name (for inter-container) |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `DEBUG` | `True` | Django / app debug mode |
+| `DEBUG` | `True` | App debug mode |
 | `SECRET_KEY` | `dev_secret_key_replace_me` | Secret key for development |
 
 ---
@@ -104,12 +135,14 @@ Copy `.env.example` to `.env` and adjust:
 
 | Action | Command |
 | -------- | -------- |
-| Start services | `docker compose up -d` |
+| Start database services | `docker compose up -d` |
 | Stop services | `docker compose down` |
 | View logs | `docker compose logs -f` |
 | Rebuild images | `docker compose build` |
-| Run smoke test | `docker compose up --abort-on-container-exit smoke-test` |
-| Connect QGIS | See README "Connect QGIS" section |
+| Run database smoke test | `docker compose run --rm smoke-test` |
+| Connect QGIS | See "Inspect with QGIS" section |
+| **Run Python tests (no Docker)** | `python -m pytest -v` |
+| Install dev dependencies | `pip install -e ".[test]"` |
 
 ---
 
@@ -117,10 +150,31 @@ Copy `.env.example` to `.env` and adjust:
 
 | Issue | Resolution |
 | -------- | ----------- |
-| `db` service won't start | Check Docker resources; ensure no other service occupies port 5432 |
-| Smoke test times out | Verify `.env` values; check `docker compose logs db` for startup errors |
-| QGIS can't connect | Confirm the `db` service is running; verify `.env` credentials match QGIS settings |
-| `psycopg2` import error | Run `docker compose up --build` to rebuild the smoke-test image |
+| `db` service won't start | Check Docker resources; ensure no other service occupies port 5432 on 127.0.0.1 |
+| Smoke test fails | Verify `.env` values; check `docker compose logs db` for startup errors |
+| QGIS can't connect | Confirm `db` service is running; verify `.env` credentials; use host `127.0.0.1` |
+| `psycopg2` import error in tests | Run `pip install -e ".[test]"` to install test dependencies |
+| Python tests fail | Ensure virtual environment is activated and `pip install -e ".[test]"` was run |
+
+---
+
+## Test Suite
+
+The project includes a comprehensive test suite for the M1.1 flood-connectivity core:
+
+```bash
+# Run all tests (no Docker required)
+python -m pytest -v
+
+# Run with coverage
+python -m pytest --cov=kshitij_model --cov-report=term-missing
+```
+
+**Current test coverage:** 38 tests covering:
+- Core connectivity algorithm (corridors, isolated depressions, barriers, diagonal rules)
+- Edge cases (NaN, ±inf elevation barriers, multiple sources, max water level)
+- Input validation (dtype, shape, water_level type, overflow)
+- Property tests (monotonicity, flooded-cell validity, input immutability)
 
 ---
 
@@ -128,9 +182,10 @@ Copy `.env.example` to `.env` and adjust:
 
 | Category | Status |
 | -------- | -------- |
-| **Implemented** | Repository structure, Docker Compose, PostgreSQL/PostGIS, smoke test, documentation, M1.1 synthetic-terrain flood-connectivity core with BFS and 4-neighbor rules |
-| **Planned** | Flood model with real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface |
-| **Not Started** | — |
+| **Implemented** | Repository structure, Docker Compose config, M1.1 flood-connectivity core (algorithm + 38 tests), documentation |
+| **Runtime-verified** | Python test suite (38/38 passing) |
+| **Pending runtime verification** | Docker/PostGIS startup, database smoke test (requires Docker) |
+| **Planned (M1.2+)** | Real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface |
 
 ---
 
@@ -142,25 +197,24 @@ kshitij/
 ├── .env.example
 ├── compose.yaml
 ├── pyproject.toml
-│
 ├── Dockerfile
-│
 ├── requirements.txt
-│
 ├── scripts/
 │   └── smoke_test.py
-│
 ├── src/
 │   └── kshitij_model/
 │       ├── __init__.py
 │       └── connectivity.py
-│
 ├── docs/
 │   ├── DEVELOPMENT.md
 │   └── DATA_SOURCES.md
-│
 ├── tests/
 │   └── test_connectivity.py
-│
 └── README.md
 ```
+
+---
+
+## License
+
+This project is for research and simulation purposes only.
