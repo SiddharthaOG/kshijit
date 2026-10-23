@@ -12,7 +12,7 @@
 | Component | Status |
 |-----------|--------|
 | Repository structure, configuration, documentation | ✅ Implemented |
-| M1.1 flood-connectivity core (algorithm + tests) | ✅ Implemented & tested (38 tests pass) |
+| M1.1 flood-connectivity core (algorithm + tests) | ✅ Implemented & tested (42 tests pass) |
 | Docker Compose + PostgreSQL/PostGIS configuration | ✅ Configured |
 | Docker/PostGIS runtime verification | ⏳ Pending (requires Docker) |
 | Database smoke test | ⏳ Pending (requires Docker) |
@@ -86,13 +86,13 @@ cp .env.example .env
 # Edit .env as needed. Default values are suitable for local development.
 ```
 
-### 4. Docker services (for database runtime verification)
+### 4. Start the database (for runtime verification)
 
 ```bash
-docker compose up -d
+docker compose up -d db
 ```
 
-This starts the PostgreSQL/PostGIS service (`db`) with health checks.
+This starts only the PostgreSQL/PostGIS service (`db`) with health checks. Wait for the health check to pass (check with `docker compose ps`).
 
 ### 5. Run smoke test (after database is healthy)
 
@@ -102,6 +102,12 @@ docker compose run --rm smoke-test
 ```
 
 The smoke test runs as a one-off job. Its exit code indicates success (0) or failure (non-zero). Check the output for "All checks passed" or specific error messages.
+
+### 6. Stop services
+
+```bash
+docker compose down
+```
 
 ### 6. Inspect with QGIS (optional)
 
@@ -135,7 +141,7 @@ Copy `.env.example` to `.env` and adjust:
 
 | Action | Command |
 | -------- | -------- |
-| Start database services | `docker compose up -d` |
+| Start database | `docker compose up -d db` |
 | Stop services | `docker compose down` |
 | View logs | `docker compose logs -f` |
 | Rebuild images | `docker compose build` |
@@ -166,9 +172,6 @@ The project includes a comprehensive test suite for the M1.1 flood-connectivity 
 ```bash
 # Run all tests (no Docker required)
 python -m pytest -v
-
-# Run with coverage
-python -m pytest --cov=kshitij_model --cov-report=term-missing
 ```
 
 **Current test coverage:** 42 tests covering:
@@ -183,8 +186,8 @@ python -m pytest --cov=kshitij_model --cov-report=term-missing
 
 | Category | Status |
 | -------- | -------- |
-| **Implemented** | Repository structure, Docker Compose config, M1.1 flood-connectivity core (algorithm + 38 tests), documentation |
-| **Runtime-verified** | Python test suite (38/38 passing) |
+| **Implemented** | Repository structure, Docker Compose config, M1.1 flood-connectivity core (algorithm + 42 tests), documentation |
+| **Runtime-verified** | Python test suite (42/42 passing) |
 | **Pending runtime verification** | Docker/PostGIS startup, database smoke test (requires Docker) |
 | **Planned (M1.2+)** | Real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface |
 
