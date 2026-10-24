@@ -29,7 +29,7 @@ class TestDEMConfig:
         assert config.dem_bucket == "copernicus-dem-30m"
         assert config.dem_region == "us-east-1"
         assert config.vertical_datum == "EGM2008"
-        assert config.nodata_value == -32768.0
+        assert config.nodata_value is None
 
     def test_custom_config(self):
         """Test custom configuration."""
@@ -39,6 +39,10 @@ class TestDEMConfig:
         )
         assert config.study_tiles == [(15, 80), (15, 81)]
         assert config.nodata_value == -9999.0
+
+        # Also test with Copernicus documented void sentinel
+        config_copernicus = DEMConfig(nodata_value=-32767.0)
+        assert config_copernicus.nodata_value == -32767.0
 
     def test_empty_study_tiles_raises(self):
         """Empty study_tiles should raise ValueError."""
