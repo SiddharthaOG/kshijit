@@ -790,3 +790,95 @@ def test_nodata_64bit_integer_bounds_accepted():
         elevation, source, water_level=5.0, nodata=2**64 - 1
     )
     assert res_max_u64.shape == (1, 2)
+
+
+def test_nodata_float32_precision_boundary_no_false_match():
+    """Large integer sentinel does not falsely match float32 cell due to precision loss."""
+    # float32 has 24 bits of mantissa; 2**24 = 16777216 is exact, 16777217 rounds to 16777216
+    elevation = np.array([[16777216.0, 16777216.0]], dtype=np.float32)
+    source = np.array([[True, False]], dtype=bool)
+    water_level = 20000000.0
+
+    # nodata=16777217 cannot be represented in float32 without rounding;
+    # it must NOT match elevation cell 16777216.0
+    res_inexact = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=16777217
+    )
+    assert res_inexact[0, 0]  # source is valid and flooded
+    assert res_inexact[0, 1]  # neighbor is valid and flooded
+
+    # nodata=16777216 is exact in float32; it MUST match and block
+    res_exact = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=16777216
+    )
+    assert not res_exact[0, 0]
+    assert not res_exact[0, 1]
+
+
+def test_nodata_float64_precision_boundary_no_false_match():
+    """Large integer sentinel does not falsely match float64 cell due to precision loss."""
+    # float64 has 53 bits of mantissa; 2**53 = 9007199254740992 is exact, 2**53 + 1 rounds
+    elevation = np.array([[float(2**53), float(2**53)]], dtype=np.float64)
+    source = np.array([[True, False]], dtype=bool)
+    water_level = 1e16
+
+    # nodata = 2**53 + 1 cannot be represented in float64; must NOT match 2**53.0
+    res_inexact = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=2**53 + 1
+    )
+    assert res_inexact[0, 0]
+    assert res_inexact[0, 1]
+
+    # nodata = 2**53 is exact in float64; MUST match and block
+    res_exact = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=2**53
+    )
+    assert not res_exact[0, 0]
+    assert not res_exact[0, 1]
+
+
+def test_nodata_int64_array_with_float_precision_boundary():
+    """Float sentinel does not falsely match adjacent int64 cells across corridor."""
+    # Corridor with cell 1 = 2**53 + 1. float(2**53) rounds to 2**53.0
+    elevation = np.array([[100, 2**53 + 1, 100]], dtype=np.int64)
+    source = np.array([[True, False, False]], dtype=bool)
+    water_level = 1e16
+
+    # nodata = float(2**53) must NOT match cell 1 (2**53 + 1); corridor remains open
+    res = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=float(2**53)
+    )
+    assert res[0, 0]  # source flooded
+    assert res[0, 1]  # cell 1 flooded
+    assert res[0, 2]  # cell 2 reached and flooded
+
+    # If cell 1 is exactly 2**53, it MUST match float(2**53) and block corridor
+    elevation_blocked = np.array([[100, 2**53, 100]], dtype=np.int64)
+    res_blocked = compute_flood_extent(
+        elevation_blocked, source, water_level=water_level, nodata=float(2**53)
+    )
+    assert res_blocked[0, 0]
+    assert not res_blocked[0, 1]
+    assert not res_blocked[0, 2]
+
+
+def test_nodata_unsigned_int_with_negative_sentinel():
+    """Negative integer sentinel does not match unsigned integer elevation cells."""
+    elevation = np.array([[10, 20]], dtype=np.uint8)
+    source = np.array([[True, False]], dtype=bool)
+    water_level = 50
+
+    res = compute_flood_extent(elevation, source, water_level=water_level, nodata=-1)
+    assert res[0, 0]
+    assert res[0, 1]
+
+
+def test_nodata_int_array_with_fractional_float():
+    """Fractional float sentinel does not match integer elevation cells."""
+    elevation = np.array([[1, 2]], dtype=np.int32)
+    source = np.array([[True, False]], dtype=bool)
+    water_level = 5
+
+    res = compute_flood_extent(elevation, source, water_level=water_level, nodata=1.5)
+    assert res[0, 0]
+    assert res[0, 1]

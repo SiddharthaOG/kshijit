@@ -70,6 +70,53 @@ def _validate_nodata(nodata):
     return nodata
 
 
+def _identify_nodata_cells(elev: np.ndarray, nodata: Real | None) -> np.ndarray:
+    """Identify cells in elev that are exactly equal to nodata sentinel.
+
+    Guarantees exact mathematical equality without precision loss or false
+    matches from mixed-dtype conversions.
+    """
+    if nodata is None:
+        return np.zeros(elev.shape, dtype=bool)
+
+    # Float NaN and infinity sentinels: already captured by np.isnan(elev) | np.isinf(elev)
+    if isinstance(nodata, (float, np.floating)) and (
+        np.isnan(nodata) or np.isinf(nodata)
+    ):
+        return np.zeros(elev.shape, dtype=bool)
+
+    # Case 1: elev is floating-point (float32, float64, etc.)
+    if elev.dtype.kind == "f":
+        if isinstance(nodata, (int, np.integer)):
+            # Check if integer sentinel can be represented in elev.dtype without precision loss.
+            nodata_float = elev.dtype.type(nodata)
+            if float(nodata_float) != nodata:
+                # nodata cannot be represented in elev.dtype without rounding;
+                # therefore no cell in elev can equal nodata in exact value.
+                return np.zeros(elev.shape, dtype=bool)
+            return elev == nodata_float
+        return elev == nodata
+
+    # Case 2: elev is an integer array (int8..int64, uint8..uint64)
+    if elev.dtype.kind in ("i", "u"):
+        if isinstance(nodata, (float, np.floating)):
+            # A float can only equal an integer cell if the float is an exact integer
+            if not float(nodata).is_integer():
+                return np.zeros(elev.shape, dtype=bool)
+            nodata_int = int(nodata)
+        else:
+            nodata_int = int(nodata)
+
+        # Check if nodata_int falls within the representable range of elev.dtype
+        iinfo = np.iinfo(elev.dtype)
+        if nodata_int < iinfo.min or nodata_int > iinfo.max:
+            return np.zeros(elev.shape, dtype=bool)
+
+        return elev == elev.dtype.type(nodata_int)
+
+    return elev == nodata
+
+
 def compute_flood_extent(
     elevation: np.ndarray,
     source_mask: np.ndarray,
@@ -174,15 +221,7 @@ def compute_flood_extent(
     elev_is_invalid = np.isnan(elev) | np.isinf(elev)
 
     if nodata is not None:
-        if isinstance(nodata, (float, np.floating)) and np.isnan(nodata):
-            # NaN sentinel is already covered by np.isnan(elev) above
-            pass
-        elif isinstance(nodata, (float, np.floating)) and np.isinf(nodata):
-            # Infinite sentinel is already covered by np.isinf(elev) above
-            pass
-        else:
-            # Exact equality matching without tolerance (preserves valid negative elevations)
-            elev_is_invalid |= elev == nodata
+        elev_is_invalid |= _identify_nodata_cells(elev, nodata)
 
     # ---- identify eligible source cells: finite non-sentinel AND at or below threshold
     # Use the original elevation array to avoid sentinel-value issues when
