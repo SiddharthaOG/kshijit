@@ -564,3 +564,183 @@ def test_water_level_precision_contract():
     source = np.array([[True, False], [False, False]], dtype=bool)
     result = compute_flood_extent(elevation, source, water_level=wl)
     assert result.shape == (2, 2)
+
+
+# ===========================================================================
+# NoData sentinel regression tests
+# ===========================================================================
+
+
+def test_nodata_sentinel_blocks_connectivity():
+    """An explicit NoData sentinel blocks flood connectivity.
+
+    When nodata is supplied, cells equal to the sentinel are treated as
+    invalid terrain even if their numeric value is <= water_level.
+    """
+    elevation = np.array([[1.0, -32768.0, 2.0]], dtype=float)
+    source = np.array([[True, False, False]], dtype=bool)
+    water_level = 5.0
+
+    # Without nodata specified, -32768.0 <= 5.0 so the corridor conducts flood
+    unhardened = compute_flood_extent(elevation, source, water_level=water_level)
+    assert unhardened[0, 0]
+    assert unhardened[0, 1]
+    assert unhardened[0, 2]
+
+    # With nodata=-32768.0, sentinel cell is invalid and blocks passage
+    hardened = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=-32768.0
+    )
+    assert hardened[0, 0]  # source is flooded
+    assert not hardened[0, 1]  # sentinel cell must NOT be flooded
+    assert not hardened[0, 2]  # target cell blocked by sentinel
+
+
+def test_nodata_sentinel_source_ineligible():
+    """A source cell with NoData elevation is ineligible and produces empty flood."""
+    elevation = np.array([[-32768.0, 2.0]], dtype=float)
+    source = np.array([[True, False]], dtype=bool)
+    water_level = 5.0
+
+    result = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=-32768.0
+    )
+    assert result.shape == (1, 2)
+    assert result.dtype == bool
+    assert result.sum() == 0
+
+
+def test_nodata_exact_equality_no_tolerance():
+    """NoData matching is exact; no default np.isclose tolerances are applied."""
+    sentinel = -100.0
+    # -100.0001 is close to -100.0 (relative diff 1e-6), which default np.isclose would match
+    elevation = np.array([[1.0, -100.0001, -100.0, 2.0]], dtype=float)
+    source = np.array([[True, False, False, False]], dtype=bool)
+    water_level = 5.0
+
+    result = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=sentinel
+    )
+    assert result[0, 0]  # source flooded
+    assert result[0, 1]  # -100.0001 != -100.0: valid terrain, flooded
+    assert not result[0, 2]  # -100.0 == sentinel: invalid, not flooded
+    assert not result[0, 3]  # blocked by cell 2
+
+
+def test_valid_negative_elevations_preserved_and_flooded():
+    """Real negative elevations (e.g. coastal depressions) are preserved and floodable."""
+    # N16E080 and N16E081 have valid elevations down to -1.5m and -4.5m
+    elevation = np.array([[-4.5, -1.5, 0.0, 2.0, 10.0]], dtype=float)
+    source = np.array([[True, False, False, False, False]], dtype=bool)
+    water_level = 3.0
+
+    result = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=-32767.0
+    )
+    # Valid elevations <= 3.0 are flooded
+    assert result[0, 0]  # -4.5m flooded
+    assert result[0, 1]  # -1.5m flooded
+    assert result[0, 2]  # 0.0m flooded
+    assert result[0, 3]  # 2.0m flooded
+    # Elevation 10.0m > 3.0m is not flooded
+    assert not result[0, 4]
+
+
+def test_nodata_nan_sentinel_safe_handling():
+    """Passing np.nan or float('nan') as nodata is safely handled."""
+    elevation = np.array([[1.0, np.nan, 2.0]], dtype=float)
+    source = np.array([[True, False, False]], dtype=bool)
+    water_level = 5.0
+
+    # With nodata=np.nan
+    result_nan = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=np.nan
+    )
+    assert result_nan[0, 0]
+    assert not result_nan[0, 1]
+    assert not result_nan[0, 2]
+
+    # With nodata=float('nan')
+    result_float_nan = compute_flood_extent(
+        elevation, source, water_level=water_level, nodata=float("nan")
+    )
+    assert result_float_nan[0, 0]
+    assert not result_float_nan[0, 1]
+    assert not result_float_nan[0, 2]
+
+
+def test_nodata_inf_sentinels_safe_handling():
+    """Passing infinity as nodata is safely handled."""
+    elevation_pos = np.array([[1.0, np.inf, 2.0]], dtype=float)
+    source = np.array([[True, False, False]], dtype=bool)
+    result_pos = compute_flood_extent(
+        elevation_pos, source, water_level=5.0, nodata=np.inf
+    )
+    assert result_pos[0, 0]
+    assert not result_pos[0, 1]
+    assert not result_pos[0, 2]
+
+    elevation_neg = np.array([[1.0, -np.inf, 2.0]], dtype=float)
+    result_neg = compute_flood_extent(
+        elevation_neg, source, water_level=5.0, nodata=-np.inf
+    )
+    assert result_neg[0, 0]
+    assert not result_neg[0, 1]
+    assert not result_neg[0, 2]
+
+
+def test_nodata_backward_compatibility():
+    """Callers omitting nodata retain exact default behavior."""
+    elevation = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    source = np.array([[True, False], [False, False]], dtype=bool)
+
+    # 3-arg call
+    res1 = compute_flood_extent(elevation, source, 2.5)
+    # 4-arg explicit None call
+    res2 = compute_flood_extent(elevation, source, 2.5, nodata=None)
+    assert np.array_equal(res1, res2)
+    assert res1[0, 0]
+    assert res1[0, 1]
+    assert not res1[1, 0]
+    assert not res1[1, 1]
+
+
+def test_nodata_validation_type_errors():
+    """Non-numeric non-None nodata types raise TypeError."""
+    elevation = np.array([[1.0, 2.0]], dtype=float)
+    source = np.array([[True, False]], dtype=bool)
+
+    # Boolean is explicitly rejected
+    with pytest.raises(TypeError, match="nodata must be a real number"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=True)
+
+    with pytest.raises(TypeError, match="nodata must be a real number"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=False)
+
+    # String is rejected
+    with pytest.raises(TypeError, match="nodata must be a real number"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata="None")
+
+    with pytest.raises(TypeError, match="nodata must be a real number"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata="invalid")
+
+    # Sequence is rejected
+    with pytest.raises(TypeError, match="nodata must be a real number"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=[-32768])
+
+    # Complex is rejected
+    with pytest.raises(TypeError, match="nodata must be a real number"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=1 + 2j)
+
+
+def test_nodata_input_immutability():
+    """Input elevation array with sentinel is not mutated."""
+    elevation = np.array([[1.0, -32768.0, 3.0]], dtype=float)
+    source = np.array([[True, False, False]], dtype=bool)
+    elev_copy = elevation.copy()
+    src_copy = source.copy()
+
+    compute_flood_extent(elevation, source, water_level=5.0, nodata=-32768.0)
+
+    assert np.array_equal(elevation, elev_copy)
+    assert np.array_equal(source, src_copy)

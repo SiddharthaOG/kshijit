@@ -45,17 +45,38 @@ def _validate_water_level(water_level) -> float:
     return wl
 
 
+def _validate_nodata(nodata):
+    """Validate optional nodata sentinel.
+
+    Accepts None, or real numbers (int, float, NumPy integer/floating scalars),
+    including NaN and infinity.
+    Rejects: bool, complex, string, sequences, and arbitrary objects.
+    """
+    if nodata is None:
+        return None
+    if isinstance(nodata, bool):
+        raise TypeError(
+            "nodata must be a real number (int or float) or None, not bool."
+        )
+    if not isinstance(nodata, Real):
+        raise TypeError(
+            f"nodata must be a real number (int or float) or None, got {type(nodata).__name__}."
+        )
+    return nodata
+
+
 def compute_flood_extent(
     elevation: np.ndarray,
     source_mask: np.ndarray,
     water_level,
+    nodata: Real | None = None,
 ) -> np.ndarray:
     """Compute flood extent using threshold connectivity.
 
     For a given terrain grid, river-source mask, and water-level threshold,
     identifies cells that:
 
-    1. Have valid (finite) elevation data.
+    1. Have valid (finite and non-sentinel) elevation data.
     2. Have elevation less than or equal to the specified water level.
     3. Are connected to an eligible river-source cell through eligible
        terrain cells (4-neighbor connectivity: up, down, left, right).
@@ -74,8 +95,18 @@ def compute_flood_extent(
         NumPy integer/floating scalars accepted). Must not be NaN, inf,
         -inf, bool, complex, string, or None.
 
-        A source cell is eligible only if its terrain is valid (finite) and
-        its elevation is at or below *water_level*.
+        A source cell is eligible only if its terrain is valid (finite and
+        non-sentinel) and its elevation is at or below *water_level*.
+    nodata:
+        Optional NoData sentinel value. Can be a real numeric scalar (int, float,
+        NumPy integer/floating scalar) or None (default). When specified as a
+        finite number, cells in *elevation* that are exactly equal to *nodata*
+        are treated as invalid terrain (cannot be flooded, cannot serve as
+        eligible sources, and cannot be traversed). If specified as NaN
+        (e.g. ``np.nan``) or infinity, all NaN or infinite cells are treated as
+        invalid (matching the default handling). No tolerance (such as
+        ``np.isclose``) is applied; matching is exact, preserving genuine
+        negative elevations.
 
     Returns
     -------
@@ -90,7 +121,8 @@ def compute_flood_extent(
         If *elevation* or *source_mask* is not a NumPy array, or if they are
         not 2-D, or if *source_mask* is not Boolean, or if *elevation* dtype
         is not a supported numeric type, or if *water_level* is not a real
-        scalar (e.g., string, None, complex, bool).
+        scalar (e.g., string, None, complex, bool), or if *nodata* is not a
+        real numeric scalar or None (e.g., bool, string).
     ValueError
         If *elevation* and *source_mask* shapes differ, or if *elevation* or
         *source_mask* is empty, or if *water_level* is not finite.
@@ -123,18 +155,30 @@ def compute_flood_extent(
             f"{elevation.shape} vs {source_mask.shape}."
         )
 
-    # ---- validate water_level -------------------------------------------------
+    # ---- validate water_level and nodata --------------------------------------
     water_level = _validate_water_level(water_level)
+    nodata = _validate_nodata(nodata)
 
     # ---- work on copies so we don't modify caller's arrays --------------------
     elev = elevation.copy()
     src = source_mask.copy()
 
-    # ---- treat NaN / inf elevation as invalid (cannot be flooded/traversed) ---
+    # ---- treat NaN / inf elevation and nodata sentinel as invalid ------------
     # NaN and ±inf elevations are invalid; they block connectivity.
     elev_is_invalid = np.isnan(elev) | np.isinf(elev)
 
-    # ---- identify eligible source cells: finite elevation AND at or below threshold
+    if nodata is not None:
+        if np.isnan(nodata):
+            # NaN sentinel is already covered by np.isnan(elev) above
+            pass
+        elif np.isinf(nodata):
+            # Infinite sentinel is already covered by np.isinf(elev) above
+            pass
+        else:
+            # Exact equality matching without tolerance (preserves valid negative elevations)
+            elev_is_invalid |= elev == nodata
+
+    # ---- identify eligible source cells: finite non-sentinel AND at or below threshold
     # Use the original elevation array to avoid sentinel-value issues when
     # water_level is near the maximum representable finite float.
     eligible_sources = src & ~elev_is_invalid & (elevation <= water_level)
@@ -142,7 +186,10 @@ def compute_flood_extent(
     # Mark invalid elevations as above threshold so they are never traversed during BFS.
     # The sentinel value is a pragmatic choice; invalid cells are already excluded
     # from eligible_sources and the BFS neighbor check also guards against them.
-    elev[elev_is_invalid] = water_level + 1.0
+    try:
+        elev[elev_is_invalid] = water_level + 1.0
+    except (OverflowError, TypeError, ValueError):
+        pass
 
     # ---- if no eligible source cells, return all-false mask ------------------
     if not eligible_sources.any():

@@ -56,7 +56,14 @@ class DEMConfig:
     vertical_datum: str = "EGM2008"  # EGM2008 geoid
 
     # NoData handling
-    nodata_value: float = -32768.0  # Common NoData value for Copernicus DEM
+    # Source Copernicus DEM GLO-30 GeoTIFFs on AWS Open Data do not declare an
+    # explicit GDAL NoData tag (profile nodata is None; all pixels marked valid).
+    # Official product XML specifications document -32767 as the product-specific
+    # void sentinel (<tsxx:nrInvalidPixels valueInvalidPixels="-32767">), but
+    # downloaded study area tiles contain 0 invalid pixels.
+    # Default is None to reflect actual source raster state without silently
+    # assuming or inventing a sentinel.
+    nodata_value: float | None = None
 
     def __post_init__(self):
         """Validate configuration."""
