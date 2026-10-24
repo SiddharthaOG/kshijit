@@ -744,3 +744,49 @@ def test_nodata_input_immutability():
 
     assert np.array_equal(elevation, elev_copy)
     assert np.array_equal(source, src_copy)
+
+
+def test_nodata_oversized_integer_raises():
+    """Oversized Python integers exceeding 64-bit bounds raise ValueError."""
+    elevation = np.array([[1.0, 2.0]], dtype=float)
+    source = np.array([[True, False]], dtype=bool)
+
+    # 10**100 raises ValueError (not TypeError from NumPy ufunc)
+    with pytest.raises(ValueError, match="too large to be represented"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=10**100)
+
+    # Negative oversized integer raises ValueError
+    with pytest.raises(ValueError, match="too large to be represented"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=-(10**100))
+
+    # Boundary beyond uint64 (2**64) raises
+    with pytest.raises(ValueError, match="too large to be represented"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=2**64)
+
+    # Boundary below int64 (-2**63 - 1) raises
+    with pytest.raises(ValueError, match="too large to be represented"):
+        compute_flood_extent(elevation, source, water_level=5.0, nodata=-(2**63) - 1)
+
+
+def test_nodata_64bit_integer_bounds_accepted():
+    """Integers at valid 64-bit boundaries are accepted without error."""
+    elevation = np.array([[1.0, 2.0]], dtype=float)
+    source = np.array([[True, False]], dtype=bool)
+
+    # Max int64
+    res_max_i64 = compute_flood_extent(
+        elevation, source, water_level=5.0, nodata=2**63 - 1
+    )
+    assert res_max_i64.shape == (1, 2)
+
+    # Min int64
+    res_min_i64 = compute_flood_extent(
+        elevation, source, water_level=5.0, nodata=-(2**63)
+    )
+    assert res_min_i64.shape == (1, 2)
+
+    # Max uint64
+    res_max_u64 = compute_flood_extent(
+        elevation, source, water_level=5.0, nodata=2**64 - 1
+    )
+    assert res_max_u64.shape == (1, 2)
