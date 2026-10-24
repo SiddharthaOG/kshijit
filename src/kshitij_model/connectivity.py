@@ -51,6 +51,7 @@ def _validate_nodata(nodata):
     Accepts None, or real numbers (int, float, NumPy integer/floating scalars),
     including NaN and infinity.
     Rejects: bool, complex, string, sequences, and arbitrary objects.
+    Rejects integer values that exceed the range of supported 64-bit integers.
     """
     if nodata is None:
         return None
@@ -62,6 +63,10 @@ def _validate_nodata(nodata):
         raise TypeError(
             f"nodata must be a real number (int or float) or None, got {type(nodata).__name__}."
         )
+    if isinstance(nodata, (int, np.integer)) and (
+        nodata < -9223372036854775808 or nodata > 18446744073709551615
+    ):
+        raise ValueError("nodata integer value is too large to be represented.")
     return nodata
 
 
@@ -125,7 +130,8 @@ def compute_flood_extent(
         real numeric scalar or None (e.g., bool, string).
     ValueError
         If *elevation* and *source_mask* shapes differ, or if *elevation* or
-        *source_mask* is empty, or if *water_level* is not finite.
+        *source_mask* is empty, or if *water_level* is not finite, or if
+        *nodata* is an integer too large to be represented.
     """
     # ---- validate elevation ---------------------------------------------------
     if not isinstance(elevation, np.ndarray):
@@ -168,10 +174,10 @@ def compute_flood_extent(
     elev_is_invalid = np.isnan(elev) | np.isinf(elev)
 
     if nodata is not None:
-        if np.isnan(nodata):
+        if isinstance(nodata, (float, np.floating)) and np.isnan(nodata):
             # NaN sentinel is already covered by np.isnan(elev) above
             pass
-        elif np.isinf(nodata):
+        elif isinstance(nodata, (float, np.floating)) and np.isinf(nodata):
             # Infinite sentinel is already covered by np.isinf(elev) above
             pass
         else:
