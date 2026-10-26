@@ -48,8 +48,6 @@ class RasterMetadata:
 class RasterPreprocessingError(Exception):
     """Raised when raster preprocessing fails."""
 
-    pass
-
 
 def inspect_raster(path: Path | str) -> dict[str, Any]:
     """Inspect a raster file and return its metadata.
