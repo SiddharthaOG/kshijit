@@ -10,9 +10,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_bounds
 
-from kshitij_model.config import DEMConfig, get_config
 from kshitij_model.raster_preprocessing import (
-    RasterPreprocessingError,
     build_validity_mask,
     crop_raster,
     inspect_raster,
@@ -121,8 +119,8 @@ class TestMosaicTiles:
             ) as dst:
                 dst.write(np.full((100, 100), float(i + 1), dtype=np.float32), 1)
 
-        dst_path = tmp_path / "mosaic.tif"
-        result = mosaic_tiles(
+        tmp_path / "mosaic.tif"
+        mosaic_tiles(
             tile_paths=[Path(p) for p in tiles],
             dst_path=tmp_path / "mosaic.tif",
             bounds=(79.0, 16.0, 82.0, 17.0),
@@ -132,7 +130,7 @@ class TestMosaicTiles:
             assert src.width == 300
             assert src.height == 100
             assert src.crs.to_string() == "EPSG:4326"
-            data = src.read(1)
+            src.read(1)
             assert 1.0 in src.read(1)
             assert 2.0 in src.read(1)
             assert 3.0 in src.read(1)
@@ -143,7 +141,7 @@ class TestBuildValidityMask:
 
     def test_nan_masked(self):
         """NaN values should be masked as invalid."""
-        data = np.array([[1.0, np.nan, 3.0]], dtype=float)
+        np.array([[1.0, np.nan, 3.0]], dtype=float)
         mask = build_validity_mask(np.array([[1.0, np.nan, 3.0]]), nodata=None, config_nodata=None)
         assert mask[0, 0]  # valid
         assert not mask[0, 1]  # NaN masked
@@ -151,7 +149,7 @@ class TestBuildValidityMask:
 
     def test_inf_masked(self):
         """Positive infinity should be masked."""
-        data = np.array([[1.0, np.inf, 3.0]], dtype=float)
+        np.array([[1.0, np.inf, 3.0]], dtype=float)
         mask = build_validity_mask(np.array([[1.0, np.inf, 3.0]]), nodata=None, config_nodata=None)
         assert mask[0, 0]
         assert not mask[0, 1]
@@ -159,7 +157,7 @@ class TestBuildValidityMask:
 
     def test_negative_inf_masked(self):
         """Negative infinity should be masked."""
-        data = np.array([[1.0, -np.inf, 3.0]], dtype=float)
+        np.array([[1.0, -np.inf, 3.0]], dtype=float)
         mask = build_validity_mask(np.array([[1.0, -np.inf, 3.0]]), nodata=None, config_nodata=None)
         assert mask[0, 0]
         assert not mask[0, 1]
@@ -167,7 +165,7 @@ class TestBuildValidityMask:
 
     def test_sentinel_masked(self):
         """Sentinel value should be masked."""
-        data = np.array([[1.0, -32768.0, 3.0]], dtype=float)
+        np.array([[1.0, -32768.0, 3.0]], dtype=float)
         mask = build_validity_mask(np.array([[1.0, -32768.0, 3.0]]), nodata=-32768.0, config_nodata=None)
         assert mask[0, 0]
         assert not mask[0, 1]
@@ -175,7 +173,7 @@ class TestBuildValidityMask:
 
     def test_zero_preserved(self):
         """Zero elevation should be preserved as valid."""
-        data = np.array([[0.0, 1.0, 2.0]], dtype=float)
+        np.array([[0.0, 1.0, 2.0]], dtype=float)
         mask = build_validity_mask(np.array([[0.0, 1.0, 2.0]]), nodata=-32768.0, config_nodata=None)
         assert mask[0, 0]
         assert mask[0, 1]
@@ -183,7 +181,7 @@ class TestBuildValidityMask:
 
     def test_negative_elevation_preserved(self):
         """Negative elevations (coastal depressions) should be preserved."""
-        data = np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
+        np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
         mask = build_validity_mask(np.array([[-4.5, -1.5, 0.0, 2.0]]), nodata=-32768.0, config_nodata=None)
         assert all(mask[0])
 

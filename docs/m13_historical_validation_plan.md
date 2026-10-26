@@ -11,7 +11,8 @@ Compare Kshitij's simulated flood extent against the September 2024 Vijayawada i
 | Attribute | Detail | Source |
 |-----------|--------|--------|
 | **Product** | ISRO/NRSC September 2024 Flood Inundation Map (Andhra Pradesh) | APSAC |
-| **Publication date** | 13 September 2024 | APSAC collection |
+| **Observation date** | 13 September 2024 (from filename `AP_2024_13_09_Map.pdf`) | Filename convention |
+| **Publication / issue date** | 13 September 2024 | APSAC collection page |
 | **File** | `AP_2024_13_09_Map.pdf` (952 KB) | Downloaded from https://apsac.ap.gov.in/?page_id=7156 |
 | **Sensor / Method** | SAR-based (likely Sentinel-1 or RISAT-1A) rapid flood mapping | ISRO/NRSC standard practice |
 | **Mapped phenomenon** | **Observed surface water extent** (inundation + accumulated rainwater pools) — not modelled flood extent | ISRO/NRSC rapid mapping products |
@@ -46,13 +47,13 @@ Compare Kshitij's simulated flood extent against the September 2024 Vijayawada i
 
 ### DEM Tile Coverage Verification
 
-| Tile | Bounds (EPSG:4326) | Covers AOI? |
-|------|-------------------|-------------|
-| N16E079 | 79°E–80°E, 16°N–17°N | Partial (western edge) |
-| N16E080 | 80°E–81°E, 16°N–17°N | **Full coverage (core)** |
-| N16E081 | 81°E–82°E, 16°N–17°N | Partial (eastern edge) |
+| Tile | Bounds (EPSG:4326) | Covers AOI (80.5°E–81.2°E)? |
+|------|-------------------|------------------------------|
+| N16E079 | 79°E–80°E, 16°N–17°N | **No** (ends at 80°E, AOI starts at 80.5°E) |
+| N16E080 | 80°E–81°E, 16°N–17°N | **Yes** — covers ~80.5°E–81°E |
+| N16E081 | 81°E–82°E, 16°N–17°N | **Partial** — covers ~81°E–81.2°E |
 
-**Conclusion**: The 3 acquired tiles (N16E079, N16E080, N16E081) **cover the provisional AOI**, but the AOI extends slightly beyond N16E080 into adjacent tiles. The final AOI should be refined by digitising the NRSC reference map extent and intersecting with available DEM tiles.
+**Conclusion**: The 2 acquired tiles (N16E080, N16E081) cover the provisional AOI (80.5°E–81.2°E). Tile N16E079 (79°E–80°E) does not overlap the AOI. The final AOI should be refined by digitising the NRSC reference map extent and intersecting with available DEM tiles.
 
 ### Uncertainty
 
@@ -70,10 +71,12 @@ All rasters (DEM, model output, reference inundation) must share a common grid b
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
 | **CRS** | EPSG:4326 (WGS84) | Matches DEM and reference PDF georeferencing |
-| **Resolution** | 30 m (1 arc-second) | Matches Copernicus DEM GLO-30 native resolution |
-| **Grid alignment** | Aligned to 1 arc-second grid (multiples of 1/3600°) | Avoids resampling artifacts |
-| **Extent** | Final AOI bounds snapped to 30 m grid | Defined after reference digitisation |
+| **Resolution** | 1 arc-second (≈30.9 m at equator; ≈29.6 m at 16.5°N latitude in longitude direction) | Matches Copernicus DEM GLO-30 native angular resolution |
+| **Grid alignment** | Aligned to 1 arc-second grid (multiples of 1/3600°) | Avoids resampling artifacts; preserves native DEM grid |
+| **Extent** | Final AOI bounds snapped to 1 arc-second grid | Defined after reference digitisation |
 | **Resampling** | Nearest-neighbor (reference), bilinear (DEM) | Preserves binary mask integrity |
+
+> **Note on angular vs. metric resolution**: EPSG:4326 is a geographic (angular) CRS. 1 arc-second ≈ 30.9 m at the equator in both directions, but the longitudinal ground distance shrinks with latitude as cos(latitude). At Vijayawada (~16.5°N), 1 arc-second ≈ 29.6 m in longitude and ≈30.9 m in latitude. For area calculations, use an equal-area projection (e.g., EPSG:6933 or a custom Albers equal-area) or compute cell areas using the latitude-dependent formula: `cell_area ≈ (111320 m/°)² × cos(lat) × (1/3600)²`.
 
 ### Valid-Data Mask & NoData Treatment
 

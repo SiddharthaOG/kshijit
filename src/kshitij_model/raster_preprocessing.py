@@ -6,21 +6,15 @@ tiles for the flood-connectivity model.
 
 from __future__ import annotations
 
-import json
-import warnings
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.merge import merge
-from rasterio.transform import from_bounds
-from rasterio.windows import from_bounds
-
-from .config import DEMConfig
-from .connectivity import compute_flood_extent
+from rasterio.windows import from_bounds as from_bounds_window
 
 
 @dataclass
@@ -54,7 +48,6 @@ class RasterMetadata:
 class RasterPreprocessingError(Exception):
     """Raised when raster preprocessing fails."""
 
-    pass
 
 
 def inspect_raster(path: Path | str) -> dict[str, Any]:
@@ -115,7 +108,7 @@ def _bounds_to_window(src: rasterio.DatasetReader, bounds: tuple[float, float, f
     """
     # Convert geographic bounds to pixel window
     left, bottom, right, top = bounds
-    window = from_bounds(left, bottom, right, top, transform=src.transform)
+    window = from_bounds_window(left, bottom, right, top, transform=src.transform)
     return window
 
 
@@ -157,7 +150,7 @@ def crop_raster(
 
         # Calculate window for cropping
         left, bottom, right, top = bounds
-        window = from_bounds(left, bottom, right, top, transform=src.transform)
+        window = from_bounds_window(left, bottom, right, top, transform=src.transform)
 
         # Read data within window
         data = src.read(1, window=window, masked=True)
@@ -394,9 +387,6 @@ def prepare_model_input(
     """
     with rasterio.open(raster_path) as src:
         data = src.read(1)
-        transform = src.transform
-        crs = src.crs
-        bounds = src.bounds
 
         # Build validity mask: explicit nodata > config_nodata > source nodata
         # If all are None, build_validity_mask will only mask NaN/inf

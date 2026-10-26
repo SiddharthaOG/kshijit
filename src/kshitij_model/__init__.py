@@ -19,22 +19,22 @@ M1.2 Phase 2 adds raster preprocessing utilities for working with real DEM data:
 
 from .connectivity import compute_flood_extent
 from .raster_preprocessing import (
-    inspect_raster,
-    crop_raster,
-    mosaic_tiles,
-    build_validity_mask,
-    write_geotiff,
-    prepare_model_input,
     RasterPreprocessingError,
+    build_validity_mask,
+    crop_raster,
+    inspect_raster,
+    mosaic_tiles,
+    prepare_model_input,
+    write_geotiff,
 )
 
 __all__ = [
-    "compute_flood_extent",
-    "inspect_raster",
-    "crop_raster",
-    "mosaic_tiles",
-    "build_validity_mask",
-    "write_geotiff",
-    "prepare_model_input",
     "RasterPreprocessingError",
+    "build_validity_mask",
+    "compute_flood_extent",
+    "crop_raster",
+    "inspect_raster",
+    "mosaic_tiles",
+    "prepare_model_input",
+    "write_geotiff",
 ]
