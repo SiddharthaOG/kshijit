@@ -32,7 +32,8 @@ class TestRasterInspection:
         try:
             # Create a simple test raster
             with rasterio.open(
-                temp_path, "w",
+                temp_path,
+                "w",
                 driver="GTiff",
                 dtype="float32",
                 width=100,
@@ -67,7 +68,8 @@ class TestCropRaster:
         # Create source raster
         src_path = tmp_path / "source.tif"
         with rasterio.open(
-            src_path, "w",
+            src_path,
+            "w",
             driver="GTiff",
             dtype="float32",
             width=100,
@@ -106,7 +108,9 @@ class TestMosaicTiles:
             tile_path = Path(tempfile.mktemp(suffix=f"_{i}.tif", dir=tmp_path))
             tiles.append(str(tile_path))
 
-            with rasterio.open(tile_path, "w",
+            with rasterio.open(
+                tile_path,
+                "w",
                 driver="GTiff",
                 dtype="float32",
                 width=100,
@@ -142,7 +146,9 @@ class TestBuildValidityMask:
     def test_nan_masked(self):
         """NaN values should be masked as invalid."""
         np.array([[1.0, np.nan, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, np.nan, 3.0]]), nodata=None, config_nodata=None)
+        mask = build_validity_mask(
+            np.array([[1.0, np.nan, 3.0]]), nodata=None, config_nodata=None
+        )
         assert mask[0, 0]  # valid
         assert not mask[0, 1]  # NaN masked
         assert mask[0, 2]  # valid
@@ -150,7 +156,9 @@ class TestBuildValidityMask:
     def test_inf_masked(self):
         """Positive infinity should be masked."""
         np.array([[1.0, np.inf, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, np.inf, 3.0]]), nodata=None, config_nodata=None)
+        mask = build_validity_mask(
+            np.array([[1.0, np.inf, 3.0]]), nodata=None, config_nodata=None
+        )
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
@@ -158,7 +166,9 @@ class TestBuildValidityMask:
     def test_negative_inf_masked(self):
         """Negative infinity should be masked."""
         np.array([[1.0, -np.inf, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, -np.inf, 3.0]]), nodata=None, config_nodata=None)
+        mask = build_validity_mask(
+            np.array([[1.0, -np.inf, 3.0]]), nodata=None, config_nodata=None
+        )
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
@@ -166,7 +176,9 @@ class TestBuildValidityMask:
     def test_sentinel_masked(self):
         """Sentinel value should be masked."""
         np.array([[1.0, -32768.0, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, -32768.0, 3.0]]), nodata=-32768.0, config_nodata=None)
+        mask = build_validity_mask(
+            np.array([[1.0, -32768.0, 3.0]]), nodata=-32768.0, config_nodata=None
+        )
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
@@ -174,7 +186,9 @@ class TestBuildValidityMask:
     def test_zero_preserved(self):
         """Zero elevation should be preserved as valid."""
         np.array([[0.0, 1.0, 2.0]], dtype=float)
-        mask = build_validity_mask(np.array([[0.0, 1.0, 2.0]]), nodata=-32768.0, config_nodata=None)
+        mask = build_validity_mask(
+            np.array([[0.0, 1.0, 2.0]]), nodata=-32768.0, config_nodata=None
+        )
         assert mask[0, 0]
         assert mask[0, 1]
         assert mask[0, 2]
@@ -182,7 +196,9 @@ class TestBuildValidityMask:
     def test_negative_elevation_preserved(self):
         """Negative elevations (coastal depressions) should be preserved."""
         np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
-        mask = build_validity_mask(np.array([[-4.5, -1.5, 0.0, 2.0]]), nodata=-32768.0, config_nodata=None)
+        mask = build_validity_mask(
+            np.array([[-4.5, -1.5, 0.0, 2.0]]), nodata=-32768.0, config_nodata=None
+        )
         assert all(mask[0])
 
 
@@ -221,7 +237,8 @@ class TestPrepareModelInput:
         """Test preparing model input from valid raster."""
         # Create a test raster
         with rasterio.open(
-            tmp_path / "test.tif", "w",
+            tmp_path / "test.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=100,
@@ -250,7 +267,8 @@ class TestPrepareModelInput:
         """Test that declared source NoData is used when no explicit override."""
         # Create a test raster with declared NoData
         with rasterio.open(
-            tmp_path / "test_nodata.tif", "w",
+            tmp_path / "test_nodata.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=10,
@@ -263,8 +281,8 @@ class TestPrepareModelInput:
         ) as dst:
             data = np.full((10, 10), 5.0, dtype=np.float32)
             data[0, 0] = -9999.0  # NoData pixel
-            data[0, 1] = 0.0      # valid zero elevation
-            data[0, 2] = -2.5     # valid negative elevation
+            data[0, 1] = 0.0  # valid zero elevation
+            data[0, 2] = -2.5  # valid negative elevation
             dst.write(data, 1)
 
         elevation, validity_mask, metadata = prepare_model_input(
@@ -283,7 +301,8 @@ class TestPrepareModelInput:
     def test_prepare_model_input_explicit_nodata_overrides_source(self, tmp_path: Path):
         """Test that explicit nodata argument overrides source NoData."""
         with rasterio.open(
-            tmp_path / "test_override.tif", "w",
+            tmp_path / "test_override.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=10,
@@ -313,7 +332,8 @@ class TestPrepareModelInput:
     def test_prepare_model_input_config_nodata_fallback(self, tmp_path: Path):
         """Test config_nodata is used when explicit nodata is None but source has no NoData."""
         with rasterio.open(
-            tmp_path / "test_config.tif", "w",
+            tmp_path / "test_config.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=10,
