@@ -8,6 +8,8 @@ The M1.2 milestone (Real DEM Acquisition, Raster Preprocessing & Model Integrati
 - Copernicus DEM GLO-30 tiles for the Vijayawada study area are confirmed accessible via AWS S3
 - ISRO/NRSC September 2024 flood reference map is accessible
 
+> **Note**: The study extent defined below is **provisional** pending focused validation against the September 2024 NRSC inundation map. The current tile selection (N16E079, N16E080, N16E081) is based on preliminary geographic analysis of the Krishna River corridor through Vijayawada.
+
 ## 1. Study Area Definition
 
 ### Geographic Context
@@ -16,8 +18,8 @@ The M1.2 milestone (Real DEM Acquisition, Raster Preprocessing & Model Integrati
 - **Hydrology**: Krishna River flows through the city
 - **Event**: September 2024 flood event (heavy rainfall + Krishna River flooding)
 
-### Proposed Study Area Extent
-Based on the flood event geography and DEM tile availability:
+### Proposed Study Area Extent (Provisional)
+Based on the flood event geography and DEM tile availability; **extent is provisional pending focused validation against the September 2024 NRSC reference map**:
 
 | Priority | Tiles | Coverage | Rationale |
 |----------|-------|----------|-----------|
@@ -25,7 +27,7 @@ Based on the flood event geography and DEM tile availability:
 | **Extended (Recommended)** | N15E079, N15E080, N15E081 | 15°N–16°N, 79°E–81°E | Upstream/downstream flood extent, rural areas |
 | **Extended (Optional)** | N17E079, N17E080, N17E081 | 17°N–18°N, 79°E–81°E | Northern catchment areas |
 
-**Recommended Minimum**: 3 core tiles (N16E079, N16E080, N16E081) covering ~3°×1° ≈ 100km × 110km covering the Krishna River corridor through Vijayawada.
+**Recommended Minimum**: 3 core tiles (N16E079, N16E080, N16E081) covering ~3°×1° ≈ 100km × 110km covering the Krishna River corridor through Vijayawada. **Note**: Exact flood extent boundaries require validation against the September 2024 NRSC inundation map; the above tile selection is based on preliminary geographic analysis.
 
 ### Evidence for Extent
 - **Reference Map**: ISRO/NRSC AP_2024_13_09_Map.pdf (13 Sept 2024) shows flood inundation along Krishna River through Vijayawada urban area

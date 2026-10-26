@@ -7,9 +7,9 @@
 | **M0** | ✅ Configuration complete | Repository, Docker Compose, PostgreSQL/PostGIS config, documentation |
 | **M1.1** | ✅ Implemented & tested | Synthetic-terrain flood-connectivity core: NumPy-based threshold-connectivity model with 4-neighbor BFS, 42 tests pass |
 | **M1.2 Phase 1** | ✅ **Completed** | DEM acquisition: 3 Copernicus DEM GLO-30 tiles acquired, verified, and cached |
-| **M1.2 Phase 2** | 📋 Planned | Raster preprocessing: crop, mosaic, validity masks, GeoTIFF output |
-| **M1.2 Phase 3** | 📋 Planned | Model adapter: raster-to-array adapter with validity mask preservation |
-| **M1.2 Phase 4** | 📋 Planned | Offline tests: synthetic raster fixtures, edge cases, adapter regression |
+| **M1.2 Phase 2** | ✅ **Completed** | Raster preprocessing: crop, mosaic, validity masks, GeoTIFF output |
+| **M1.2 Phase 3** | ✅ **Completed** | Model adapter: raster-to-array adapter with validity mask preservation |
+| **M1.2 Phase 4** | ✅ **Completed** | Offline tests: synthetic raster fixtures, edge cases, adapter regression |
 | **M1.2 Phase 5-6** | 📋 Planned | Documentation, storage portability, CI integration |
 
 ## Deliverables and Verification Status
@@ -31,9 +31,11 @@
 | `src/kshitij_model/connectivity.py` | ✅ Created | Yes |
 | `src/kshitij_model/config.py` | ✅ Created | Yes |
 | `src/kshitij_model/dem_acquisition.py` | ✅ Created | Yes |
+| `src/kshitij_model/raster_preprocessing.py` | ✅ Created | Yes |
 | `tests/test_connectivity.py` | ✅ Created | Yes |
 | `tests/test_dem_acquisition.py` | ✅ Created | Yes |
-| **Test suite (61 tests)** | ✅ All passed | Yes |
+| `tests/test_raster_preprocessing.py` | ✅ Created | Yes |
+| **Test suite (93 tests)** | ✅ All passed | Yes |
 | Docker Compose + PostgreSQL/PostGIS running | ⏳ Not yet run | — |
 | Smoke test against running DB | ⏳ Not yet run | — |
 | QGIS connection setup | ✅ Documented | — |
@@ -97,7 +99,9 @@ The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.p
 | ---- | ------- |
 | `src/kshitij_model/dem_acquisition.py` | Core acquisition module with caching, verification, manifest |
 | `src/kshitij_model/config.py` | Configuration dataclass for DEM parameters |
+| `src/kshitij_model/raster_preprocessing.py` | Raster preprocessing (inspect, crop, mosaic, validity masks, GeoTIFF, model adapter) |
 | `tests/test_dem_acquisition.py` | 19 tests (config, tile info, manifest, acquisition, validation) |
+| `tests/test_raster_preprocessing.py` | 11 tests (inspect, crop, mosaic, validity masks, GeoTIFF, model adapter) |
 | `data/raw/dem/N16E079.tif` | Downloaded DEM tile |
 | `data/raw/dem/N16E080.tif` | Downloaded DEM tile |
 | `data/raw/dem/N16E081.tif` | Downloaded DEM tile |
@@ -134,9 +138,6 @@ The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.p
 
 ## Future Milestones (Not Started)
 
-- **M1.2 Phase 2**: Raster preprocessing (crop, mosaic, validity masks, GeoTIFF output)
-- **M1.2 Phase 3**: Model adapter (raster-to-array adapter with validity mask preservation)
-- **M1.2 Phase 4**: Offline tests (synthetic raster fixtures, edge cases, adapter regression)
 - **M1.2 Phase 5-6**: Documentation updates, storage portability, CI integration
 - **M1.3+**: Road network integration, alert engine, MapLibre interface
 - Historical flood validation against 2024 Vijayawada event (IoU metrics)
