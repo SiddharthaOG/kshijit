@@ -30,7 +30,9 @@ Kshitij is a **research prototype** designed to help a human operator assess pot
 **Current capabilities (implemented):**
 - Synthetic-terrain flood-connectivity model with 4-neighbor BFS (`src/kshitij_model/connectivity.py`)
 - Strict input validation (elevation dtype, water_level type, source_mask Boolean)
-- 42 automated tests covering connectivity, edge cases, and input validation
+- 94 automated tests covering connectivity, edge cases, and input validation
+- Raster preprocessing: crop, mosaic, validity masks, GeoTIFF output, model adapter (`src/kshitij_model/raster_preprocessing.py`)
+- DEM acquisition: Copernicus GLO-30 tiles, caching, manifest verification (`src/kshitij_model/dem_acquisition.py`)
 - Docker Compose configuration for PostgreSQL/PostGIS with health checks
 - Smoke test script for database connectivity and PostGIS verification
 
@@ -174,11 +176,14 @@ The project includes a comprehensive test suite for the M1.1 flood-connectivity 
 python -m pytest -v
 ```
 
-**Current test coverage:** 42 tests covering:
+**Current test coverage:** 96 tests covering:
 - Core connectivity algorithm (corridors, isolated depressions, barriers, diagonal rules)
 - Edge cases (NaN, ±inf elevation barriers, multiple sources, max water level)
 - Input validation (dtype, shape, water_level type, overflow)
 - Property tests (monotonicity, flooded-cell validity, input immutability, water-level precision)
+- NoData sentinel handling (12 dedicated tests)
+- Raster preprocessing: crop, mosaic, validity masks, GeoTIFF, model adapter
+- DEM acquisition: config, tile info, manifest, acquisition, validation
 
 ---
 
@@ -186,10 +191,10 @@ python -m pytest -v
 
 | Category | Status |
 | -------- | -------- |
-| **Implemented** | Repository structure, Docker Compose config, M1.1 flood-connectivity core (algorithm + 42 tests), documentation |
-| **Runtime-verified** | Python test suite (42/42 passing) |
+| **Implemented** | Repository structure, Docker Compose config, M1.1 flood-connectivity core (algorithm + 94 tests), M1.2 DEM acquisition & raster preprocessing, documentation |
+| **Runtime-verified** | Python test suite (96 tests: 94 passed, 2 skipped) |
 | **Pending runtime verification** | Docker/PostGIS startup, database smoke test (requires Docker) |
-| **Planned (M1.2+)** | Real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface |
+| **Planned (M1.3+)** | Historical validation (M1.3), Historical replay (M1.4), rainfall ingestion, road network, alert engine, MapLibre interface |
 
 ---
 
@@ -208,12 +213,22 @@ kshitij/
 ├── src/
 │   └── kshitij_model/
 │       ├── __init__.py
-│       └── connectivity.py
+│       ├── connectivity.py
+│       ├── raster_preprocessing.py
+│       ├── dem_acquisition.py
+│       └── config.py
 ├── docs/
 │   ├── DEVELOPMENT.md
-│   └── DATA_SOURCES.md
+│   ├── DATA_SOURCES.md
+│   ├── engineering_audit.md
+│   ├── m13_historical_validation_plan.md
+│   ├── m14_historical_replay_spec.md
+│   └── roadmap_next.md
 ├── tests/
-│   └── test_connectivity.py
+│   ├── __init__.py
+│   ├── test_connectivity.py
+│   ├── test_dem_acquisition.py
+│   └── test_raster_preprocessing.py
 └── README.md
 ```
 
