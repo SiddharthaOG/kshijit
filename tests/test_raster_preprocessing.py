@@ -10,9 +10,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_bounds
 
-from kshitij_model.config import DEMConfig, get_config
 from kshitij_model.raster_preprocessing import (
-    RasterPreprocessingError,
     build_validity_mask,
     crop_raster,
     inspect_raster,
@@ -34,7 +32,8 @@ class TestRasterInspection:
         try:
             # Create a simple test raster
             with rasterio.open(
-                temp_path, "w",
+                temp_path,
+                "w",
                 driver="GTiff",
                 dtype="float32",
                 width=100,
@@ -69,7 +68,8 @@ class TestCropRaster:
         # Create source raster
         src_path = tmp_path / "source.tif"
         with rasterio.open(
-            src_path, "w",
+            src_path,
+            "w",
             driver="GTiff",
             dtype="float32",
             width=100,
@@ -108,7 +108,9 @@ class TestMosaicTiles:
             tile_path = Path(tempfile.mktemp(suffix=f"_{i}.tif", dir=tmp_path))
             tiles.append(str(tile_path))
 
-            with rasterio.open(tile_path, "w",
+            with rasterio.open(
+                tile_path,
+                "w",
                 driver="GTiff",
                 dtype="float32",
                 width=100,
@@ -121,8 +123,8 @@ class TestMosaicTiles:
             ) as dst:
                 dst.write(np.full((100, 100), float(i + 1), dtype=np.float32), 1)
 
-        dst_path = tmp_path / "mosaic.tif"
-        result = mosaic_tiles(
+        tmp_path / "mosaic.tif"
+        mosaic_tiles(
             tile_paths=[Path(p) for p in tiles],
             dst_path=tmp_path / "mosaic.tif",
             bounds=(79.0, 16.0, 82.0, 17.0),
@@ -132,7 +134,7 @@ class TestMosaicTiles:
             assert src.width == 300
             assert src.height == 100
             assert src.crs.to_string() == "EPSG:4326"
-            data = src.read(1)
+            src.read(1)
             assert 1.0 in src.read(1)
             assert 2.0 in src.read(1)
             assert 3.0 in src.read(1)
@@ -143,48 +145,60 @@ class TestBuildValidityMask:
 
     def test_nan_masked(self):
         """NaN values should be masked as invalid."""
-        data = np.array([[1.0, np.nan, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, np.nan, 3.0]]), nodata=None, config_nodata=None)
+        np.array([[1.0, np.nan, 3.0]], dtype=float)
+        mask = build_validity_mask(
+            np.array([[1.0, np.nan, 3.0]]), nodata=None, config_nodata=None
+        )
         assert mask[0, 0]  # valid
         assert not mask[0, 1]  # NaN masked
         assert mask[0, 2]  # valid
 
     def test_inf_masked(self):
         """Positive infinity should be masked."""
-        data = np.array([[1.0, np.inf, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, np.inf, 3.0]]), nodata=None, config_nodata=None)
+        np.array([[1.0, np.inf, 3.0]], dtype=float)
+        mask = build_validity_mask(
+            np.array([[1.0, np.inf, 3.0]]), nodata=None, config_nodata=None
+        )
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
 
     def test_negative_inf_masked(self):
         """Negative infinity should be masked."""
-        data = np.array([[1.0, -np.inf, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, -np.inf, 3.0]]), nodata=None, config_nodata=None)
+        np.array([[1.0, -np.inf, 3.0]], dtype=float)
+        mask = build_validity_mask(
+            np.array([[1.0, -np.inf, 3.0]]), nodata=None, config_nodata=None
+        )
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
 
     def test_sentinel_masked(self):
         """Sentinel value should be masked."""
-        data = np.array([[1.0, -32768.0, 3.0]], dtype=float)
-        mask = build_validity_mask(np.array([[1.0, -32768.0, 3.0]]), nodata=-32768.0, config_nodata=None)
+        np.array([[1.0, -32768.0, 3.0]], dtype=float)
+        mask = build_validity_mask(
+            np.array([[1.0, -32768.0, 3.0]]), nodata=-32768.0, config_nodata=None
+        )
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
 
     def test_zero_preserved(self):
         """Zero elevation should be preserved as valid."""
-        data = np.array([[0.0, 1.0, 2.0]], dtype=float)
-        mask = build_validity_mask(np.array([[0.0, 1.0, 2.0]]), nodata=-32768.0, config_nodata=None)
+        np.array([[0.0, 1.0, 2.0]], dtype=float)
+        mask = build_validity_mask(
+            np.array([[0.0, 1.0, 2.0]]), nodata=-32768.0, config_nodata=None
+        )
         assert mask[0, 0]
         assert mask[0, 1]
         assert mask[0, 2]
 
     def test_negative_elevation_preserved(self):
         """Negative elevations (coastal depressions) should be preserved."""
-        data = np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
-        mask = build_validity_mask(np.array([[-4.5, -1.5, 0.0, 2.0]]), nodata=-32768.0, config_nodata=None)
+        np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
+        mask = build_validity_mask(
+            np.array([[-4.5, -1.5, 0.0, 2.0]]), nodata=-32768.0, config_nodata=None
+        )
         assert all(mask[0])
 
 
@@ -223,7 +237,8 @@ class TestPrepareModelInput:
         """Test preparing model input from valid raster."""
         # Create a test raster
         with rasterio.open(
-            tmp_path / "test.tif", "w",
+            tmp_path / "test.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=100,
@@ -252,7 +267,8 @@ class TestPrepareModelInput:
         """Test that declared source NoData is used when no explicit override."""
         # Create a test raster with declared NoData
         with rasterio.open(
-            tmp_path / "test_nodata.tif", "w",
+            tmp_path / "test_nodata.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=10,
@@ -265,8 +281,8 @@ class TestPrepareModelInput:
         ) as dst:
             data = np.full((10, 10), 5.0, dtype=np.float32)
             data[0, 0] = -9999.0  # NoData pixel
-            data[0, 1] = 0.0      # valid zero elevation
-            data[0, 2] = -2.5     # valid negative elevation
+            data[0, 1] = 0.0  # valid zero elevation
+            data[0, 2] = -2.5  # valid negative elevation
             dst.write(data, 1)
 
         elevation, validity_mask, metadata = prepare_model_input(
@@ -285,7 +301,8 @@ class TestPrepareModelInput:
     def test_prepare_model_input_explicit_nodata_overrides_source(self, tmp_path: Path):
         """Test that explicit nodata argument overrides source NoData."""
         with rasterio.open(
-            tmp_path / "test_override.tif", "w",
+            tmp_path / "test_override.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=10,
@@ -315,7 +332,8 @@ class TestPrepareModelInput:
     def test_prepare_model_input_config_nodata_fallback(self, tmp_path: Path):
         """Test config_nodata is used when explicit nodata is None but source has no NoData."""
         with rasterio.open(
-            tmp_path / "test_config.tif", "w",
+            tmp_path / "test_config.tif",
+            "w",
             driver="GTiff",
             dtype="float32",
             width=10,

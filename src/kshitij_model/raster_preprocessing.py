@@ -6,21 +6,15 @@ tiles for the flood-connectivity model.
 
 from __future__ import annotations
 
-import json
-import warnings
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.merge import merge
-from rasterio.transform import from_bounds
 from rasterio.windows import from_bounds
-
-from .config import DEMConfig
-from .connectivity import compute_flood_extent
 
 
 @dataclass
@@ -103,7 +97,9 @@ def inspect_raster(path: Path | str) -> dict[str, Any]:
         return meta
 
 
-def _bounds_to_window(src: rasterio.DatasetReader, bounds: tuple[float, float, float, float]) -> rasterio.windows.Window:
+def _bounds_to_window(
+    src: rasterio.DatasetReader, bounds: tuple[float, float, float, float]
+) -> rasterio.windows.Window:
     """Convert geographic bounds to a rasterio window.
 
     Args:
@@ -167,13 +163,15 @@ def crop_raster(
 
         # Update profile for output
         profile = src.profile.copy()
-        profile.update({
-            "height": data.shape[0],
-            "width": data.shape[1],
-            "transform": new_transform,
-            "compress": "lzw",
-            "driver": "GTiff",
-        })
+        profile.update(
+            {
+                "height": data.shape[0],
+                "width": data.shape[1],
+                "transform": new_transform,
+                "compress": "lzw",
+                "driver": "GTiff",
+            }
+        )
 
         # Set nodata value
         if dst_nodata is not None:
@@ -291,14 +289,16 @@ def mosaic_tiles(
 
         # Update profile for output
         profile = src.profile.copy()
-        profile.update({
-            "height": mosaic_data.shape[1],
-            "width": mosaic_data.shape[2],
-            "transform": mosaic_transform,
-            "compress": "lzw",
-            "driver": "GTiff",
-            "nodata": -32767,
-        })
+        profile.update(
+            {
+                "height": mosaic_data.shape[1],
+                "width": mosaic_data.shape[2],
+                "transform": mosaic_transform,
+                "compress": "lzw",
+                "driver": "GTiff",
+                "nodata": -32767,
+            }
+        )
 
         # Write output
         output_path = Path(dst_path)
@@ -349,11 +349,13 @@ def write_geotiff(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     profile = profile.copy()
-    profile.update({
-        "compress": "lzw",
-        "driver": "GTiff",
-        "nodata": nodata if nodata is not None else -32767,
-    })
+    profile.update(
+        {
+            "compress": "lzw",
+            "driver": "GTiff",
+            "nodata": nodata if nodata is not None else -32767,
+        }
+    )
 
     # Replace NaN with nodata value for output
     output_data = data.copy()
@@ -394,9 +396,6 @@ def prepare_model_input(
     """
     with rasterio.open(raster_path) as src:
         data = src.read(1)
-        transform = src.transform
-        crs = src.crs
-        bounds = src.bounds
 
         # Build validity mask: explicit nodata > config_nodata > source nodata
         # If all are None, build_validity_mask will only mask NaN/inf
