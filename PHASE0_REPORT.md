@@ -25,7 +25,7 @@ Based on the flood event geography and DEM tile availability; **extent is provis
 
 | Priority | Tiles | Coverage | Rationale |
 |----------|-------|----------|-----------|
-| **Core (Required)** | N16E079, N16E080, N16E081 | 16°N–17°N, 79°E–81°E | Krishna River corridor through Vijayawada; covers flood-affected urban area |
+| **Core (Required)** | N16E079, N16E080, N16E081 | 16°N–17°N, 79°E–82°E | Krishna River corridor through Vijayawada; covers flood-affected urban area |
 | **Extended (Recommended)** | N15E079, N15E080, N15E081 | 15°N–16°N, 79°E–81°E | Upstream/downstream flood extent, rural areas |
 | **Extended (Optional)** | N17E079, N17E080, N17E081 | 17°N–18°N, 79°E–81°E | Northern catchment areas |
 
