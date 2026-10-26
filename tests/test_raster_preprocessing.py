@@ -248,6 +248,96 @@ class TestPrepareModelInput:
         assert metadata["crs"] == "EPSG:4326"
         assert elevation.shape == (100, 100)
 
+    def test_prepare_model_input_uses_source_nodata(self, tmp_path: Path):
+        """Test that declared source NoData is used when no explicit override."""
+        # Create a test raster with declared NoData
+        with rasterio.open(
+            tmp_path / "test_nodata.tif", "w",
+            driver="GTiff",
+            dtype="float32",
+            width=10,
+            height=10,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, 10, 10),
+            nodata=-9999.0,
+            compress="lzw",
+        ) as dst:
+            data = np.full((10, 10), 5.0, dtype=np.float32)
+            data[0, 0] = -9999.0  # NoData pixel
+            data[0, 1] = 0.0      # valid zero elevation
+            data[0, 2] = -2.5     # valid negative elevation
+            dst.write(data, 1)
+
+        elevation, validity_mask, metadata = prepare_model_input(
+            tmp_path / "test_nodata.tif",
+        )
+
+        # NoData pixel should be masked
+        assert not validity_mask[0, 0]
+        # Valid zero elevation should be preserved
+        assert validity_mask[0, 1]
+        # Valid negative elevation should be preserved
+        assert validity_mask[0, 2]
+        # Metadata should include source NoData
+        assert metadata["nodata"] == -9999.0
+
+    def test_prepare_model_input_explicit_nodata_overrides_source(self, tmp_path: Path):
+        """Test that explicit nodata argument overrides source NoData."""
+        with rasterio.open(
+            tmp_path / "test_override.tif", "w",
+            driver="GTiff",
+            dtype="float32",
+            width=10,
+            height=10,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, 10, 10),
+            nodata=-9999.0,
+            compress="lzw",
+        ) as dst:
+            data = np.full((10, 10), 5.0, dtype=np.float32)
+            data[0, 0] = -9999.0  # source NoData
+            data[0, 1] = -8888.0  # different sentinel
+            dst.write(data, 1)
+
+        # Override with explicit nodata=-8888.0
+        elevation, validity_mask, metadata = prepare_model_input(
+            tmp_path / "test_override.tif",
+            nodata=-8888.0,
+        )
+
+        # Source NoData should NOT be masked (explicit override)
+        assert validity_mask[0, 0]
+        # Explicit NoData should be masked
+        assert not validity_mask[0, 1]
+
+    def test_prepare_model_input_config_nodata_fallback(self, tmp_path: Path):
+        """Test config_nodata is used when explicit nodata is None but source has no NoData."""
+        with rasterio.open(
+            tmp_path / "test_config.tif", "w",
+            driver="GTiff",
+            dtype="float32",
+            width=10,
+            height=10,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, 10, 10),
+            nodata=None,  # source has no NoData
+            compress="lzw",
+        ) as dst:
+            data = np.full((10, 10), 5.0, dtype=np.float32)
+            data[0, 0] = -7777.0  # sentinel to mask via config
+            dst.write(data, 1)
+
+        elevation, validity_mask, metadata = prepare_model_input(
+            tmp_path / "test_config.tif",
+            config_nodata=-7777.0,
+        )
+
+        assert not validity_mask[0, 0]
+        assert validity_mask[0, 1]
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

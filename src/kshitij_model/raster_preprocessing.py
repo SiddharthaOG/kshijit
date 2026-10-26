@@ -386,22 +386,25 @@ def prepare_model_input(
 
     Args:
         raster_path: Path to GeoTIFF file.
-        nodata: Explicit NoData value to use (overrides config).
-        config_nodata: NoData value from config (fallback).
+        nodata: Explicit NoData value to use (overrides config and source).
+        config_nodata: NoData value from config (fallback, overrides source).
 
     Returns:
         Tuple of (elevation_array, validity_mask, metadata_dict).
     """
     with rasterio.open(raster_path) as src:
         data = src.read(1)
-        profile = src.profile
         transform = src.transform
         crs = src.crs
         bounds = src.bounds
 
-        # Build validity mask
-        nodata_val = nodata if nodata is not None else None
-        validity_mask = build_validity_mask(data, nodata=nodata_val, config_nodata=config_nodata)
+        # Build validity mask: explicit nodata > config_nodata > source nodata
+        # If all are None, build_validity_mask will only mask NaN/inf
+        nodata_val = nodata if nodata is not None else config_nodata
+        # Fall back to source's declared nodata if no explicit override
+        if nodata_val is None:
+            nodata_val = src.nodata
+        validity_mask = build_validity_mask(data, nodata=nodata_val, config_nodata=None)
 
         metadata = {
             "crs": str(src.crs) if src.crs else None,
@@ -413,4 +416,4 @@ def prepare_model_input(
             "nodata": src.nodata,
         }
 
-        return src.read(1), validity_mask, profile
+        return data, validity_mask, metadata
