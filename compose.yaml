@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   db:
-    image: postgis/postgis:3.5-3.5-alpine
+    image: postgis/postgis:17-3.5-alpine
     container_name: kshitij-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-kshitij_dev}

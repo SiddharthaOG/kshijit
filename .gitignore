@@ -18,3 +18,31 @@ Thumbs.db
 
 # Render / deployment
 render.yaml
+
+# Data files (keep out of git)
+data/
+*.tif
+*.tiff
+*.geotiff
+*.vrt
+*.nc
+*.hdf
+*.h5
+*.pdf
+
+# Cache and temporary files
+.cache/
+*.cache
+*.tmp
+*.temp
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
