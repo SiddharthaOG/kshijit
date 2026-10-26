@@ -103,7 +103,9 @@ def inspect_raster(path: Path | str) -> dict[str, Any]:
         return meta
 
 
-def _bounds_to_window(src: rasterio.DatasetReader, bounds: tuple[float, float, float, float]) -> rasterio.windows.Window:
+def _bounds_to_window(
+    src: rasterio.DatasetReader, bounds: tuple[float, float, float, float]
+) -> rasterio.windows.Window:
     """Convert geographic bounds to a rasterio window.
 
     Args:
@@ -167,13 +169,15 @@ def crop_raster(
 
         # Update profile for output
         profile = src.profile.copy()
-        profile.update({
-            "height": data.shape[0],
-            "width": data.shape[1],
-            "transform": new_transform,
-            "compress": "lzw",
-            "driver": "GTiff",
-        })
+        profile.update(
+            {
+                "height": data.shape[0],
+                "width": data.shape[1],
+                "transform": new_transform,
+                "compress": "lzw",
+                "driver": "GTiff",
+            }
+        )
 
         # Set nodata value
         if dst_nodata is not None:
@@ -291,14 +295,16 @@ def mosaic_tiles(
 
         # Update profile for output
         profile = src.profile.copy()
-        profile.update({
-            "height": mosaic_data.shape[1],
-            "width": mosaic_data.shape[2],
-            "transform": mosaic_transform,
-            "compress": "lzw",
-            "driver": "GTiff",
-            "nodata": -32767,
-        })
+        profile.update(
+            {
+                "height": mosaic_data.shape[1],
+                "width": mosaic_data.shape[2],
+                "transform": mosaic_transform,
+                "compress": "lzw",
+                "driver": "GTiff",
+                "nodata": -32767,
+            }
+        )
 
         # Write output
         output_path = Path(dst_path)
@@ -349,11 +355,13 @@ def write_geotiff(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     profile = profile.copy()
-    profile.update({
-        "compress": "lzw",
-        "driver": "GTiff",
-        "nodata": nodata if nodata is not None else -32767,
-    })
+    profile.update(
+        {
+            "compress": "lzw",
+            "driver": "GTiff",
+            "nodata": nodata if nodata is not None else -32767,
+        }
+    )
 
     # Replace NaN with nodata value for output
     output_data = data.copy()
