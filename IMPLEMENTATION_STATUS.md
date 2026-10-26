@@ -35,7 +35,7 @@
 | `tests/test_connectivity.py` | ✅ Created | Yes |
 | `tests/test_dem_acquisition.py` | ✅ Created | Yes |
 | `tests/test_raster_preprocessing.py` | ✅ Created | Yes |
-| **Test suite (93 tests)** | ✅ All passed | Yes |
+| **Test suite (96 tests: 94 passed, 2 skipped)** | ✅ All passed | Yes |
 | Docker Compose + PostgreSQL/PostGIS running | ⏳ Not yet run | — |
 | Smoke test against running DB | ⏳ Not yet run | — |
 | QGIS connection setup | ✅ Documented | — |
@@ -127,7 +127,7 @@ The synthetic-terrain flood-connectivity core (`src/kshitij_model/connectivity.p
 
 ## Known Constraints & Limitations
 
-- PostGIS image pinned to `postgis/postgis:3.5-3.5-alpine` (not `latest`) — needs update to `17-3.5-alpine`
+- PostGIS image updated to `postgis/postgis:17-3.5-alpine` (was `3.5-3.5-alpine`)
 - Database credentials via environment variables only — never hard-coded
 - `.env` is gitignored
 - Smoke test retries 12 times at 5-second intervals for DB readiness
