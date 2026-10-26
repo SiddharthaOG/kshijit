@@ -8,8 +8,33 @@ river-source mask, using 4-neighbor (up/down/left/right) connectivity.
 The core function ``compute_flood_extent`` is deliberately isolated from Django,
 PostGIS, rasterio, GDAL, and any web-layer concerns so that it can be unit-tested
 in isolation.
+
+M1.2 Phase 2 adds raster preprocessing utilities for working with real DEM data:
+- Inspecting raster metadata
+- Cropping and mosaicking DEM tiles
+- Building validity masks
+- Writing georeferenced GeoTIFF output
+- Adapting raster data for the flood-connectivity model
 """
 
 from .connectivity import compute_flood_extent
+from .raster_preprocessing import (
+    inspect_raster,
+    crop_raster,
+    mosaic_tiles,
+    build_validity_mask,
+    write_geotiff,
+    prepare_model_input,
+    RasterPreprocessingError,
+)
 
-__all__ = ["compute_flood_extent"]
+__all__ = [
+    "compute_flood_extent",
+    "inspect_raster",
+    "crop_raster",
+    "mosaic_tiles",
+    "build_validity_mask",
+    "write_geotiff",
+    "prepare_model_input",
+    "RasterPreprocessingError",
+]
