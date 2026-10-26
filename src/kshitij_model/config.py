@@ -5,6 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+class ConfigError(ValueError):
+    """Raised when configuration validation fails."""
+
+    @classmethod
+    def empty_study_tiles(cls) -> ConfigError:
+        return cls("study_tiles cannot be empty")
+
+
 @dataclass
 class DEMConfig:
     """Configuration for DEM acquisition and processing."""
@@ -68,7 +76,7 @@ class DEMConfig:
     def __post_init__(self):
         """Validate configuration."""
         if not self.study_tiles:
-            raise ValueError("study_tiles cannot be empty")
+            raise ConfigError.empty_study_tiles()
 
 
 def get_config() -> DEMConfig:

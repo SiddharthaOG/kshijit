@@ -16,6 +16,11 @@ from rasterio.enums import Resampling
 from rasterio.merge import merge
 from rasterio.windows import from_bounds
 
+# Constants
+DEFAULT_NODATA = -32767
+SINGLE_BAND = 1
+EXPECTED_NDIM = 3
+
 
 @dataclass
 class RasterMetadata:
@@ -77,10 +82,7 @@ def inspect_raster(path: Path | str) -> dict[str, Any]:
         # Read first band for statistics
         if src.count > 0:
             data = src.read(1, masked=True)
-            if hasattr(data, "mask"):
-                valid_data = data[~data.mask]
-            else:
-                valid_data = data.flatten()
+            valid_data = data[~data.mask] if hasattr(data, "mask") else data.flatten()
             if valid_data.size > 0:
                 meta["min"] = float(np.nanmin(valid_data))
                 meta["max"] = float(np.nanmax(valid_data))
@@ -109,18 +111,16 @@ def _bounds_to_window(
     """
     # Convert geographic bounds to pixel window
     left, bottom, right, top = bounds
-    window = from_bounds(left, bottom, right, top, transform=src.transform)
-    return window
+    return from_bounds(left, bottom, right, top, transform=src.transform)
 
 
 def crop_raster(
     src_path: Path | str,
     dst_path: Path | str,
     bounds: tuple[float, float, float, float],
+    *,
     nodata: float | None = None,
-    dst_crs: str | None = None,
     dst_nodata: float | None = None,
-    compression: str = "lzw",
 ) -> dict[str, Any]:
     """Crop a raster to the given bounds.
 
@@ -129,26 +129,12 @@ def crop_raster(
         dst_path: Path to output cropped raster.
         bounds: (min_lon, min_lat, max_lon, max_lat) in WGS84 (EPSG:4326).
         nodata: NoData value to use for output (default: from source).
-        dst_crs: Output CRS (default: same as source).
         dst_nodata: NoData value for output (default: from source or -32767).
-        compression: Compression method for output (default: lzw).
 
     Returns:
         Dictionary with output metadata.
     """
     with rasterio.open(src_path) as src:
-        # Get source CRS
-        src_crs = src.crs or "EPSG:4326"
-
-        # Determine output CRS
-        dst_crs = dst_crs or src_crs
-
-        # Calculate output bounds in destination CRS
-        # For now, assume source and destination CRS are the same (EPSG:4326)
-        # If they differ, we'd need to reproject bounds
-        if dst_crs != src.crs:
-            raise NotImplementedError("Reprojection not yet supported")
-
         # Calculate window for cropping
         left, bottom, right, top = bounds
         window = from_bounds(left, bottom, right, top, transform=src.transform)
@@ -177,7 +163,7 @@ def crop_raster(
         elif nodata is not None:
             profile["nodata"] = nodata
         else:
-            profile["nodata"] = -32767
+            profile["nodata"] = DEFAULT_NODATA
 
         # Write output
         output_path = Path(dst_path)
@@ -247,9 +233,8 @@ def build_validity_mask(
 def mosaic_tiles(
     tile_paths: list[Path | str],
     dst_path: Path | str,
+    *,
     bounds: tuple[float, float, float, float] | None = None,
-    dst_nodata: float = -32767,
-    compression: str = "lzw",
     resampling: Resampling = Resampling.nearest,
 ) -> dict[str, Any]:
     """Mosaic multiple raster tiles into a single output.
@@ -294,7 +279,7 @@ def mosaic_tiles(
                 "transform": mosaic_transform,
                 "compress": "lzw",
                 "driver": "GTiff",
-                "nodata": -32767,
+                "nodata": DEFAULT_NODATA,
             }
         )
 
@@ -304,9 +289,12 @@ def mosaic_tiles(
 
         with rasterio.open(dst_path, "w", **profile) as dst:
             # Replace NaN with nodata value for output
-            output_data = np.where(np.isnan(mosaic_data), -32767, mosaic_data)
+            output_data = np.where(np.isnan(mosaic_data), DEFAULT_NODATA, mosaic_data)
             # merge() returns (bands, height, width); write expects (height, width) for single band
-            if output_data.ndim == 3 and output_data.shape[0] == 1:
+            if (
+                output_data.ndim == EXPECTED_NDIM
+                and output_data.shape[0] == SINGLE_BAND
+            ):
                 output_data = output_data[0]
             dst.write(output_data.astype(src.dtypes[0]), 1)
 

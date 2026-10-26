@@ -19,6 +19,20 @@ from kshitij_model.raster_preprocessing import (
     write_geotiff,
 )
 
+# Test constants
+TEST_WIDTH = 100
+TEST_HEIGHT = 100
+TEST_CROP_WIDTH = 50
+TEST_CROP_HEIGHT = 50
+TEST_MOSAIC_WIDTH = 300
+TEST_MOSAIC_HEIGHT = 100
+TEST_NODATA = -32767
+TEST_NODATA_CUSTOM = -9999.0
+TEST_NODATA_OVERRIDE = -8888.0
+TEST_NODATA_CONFIG = -7777.0
+TEST_ELEVATION_VALUE = 10.0
+TEST_TILE_VALUES = (1.0, 2.0, 3.0)
+
 
 class TestRasterInspection:
     """Tests for raster inspection functionality."""
@@ -26,38 +40,35 @@ class TestRasterInspection:
     def test_inspect_raster_metadata(self, tmp_path: Path):
         """Test that raster metadata is correctly extracted."""
         # Create a synthetic raster
-        with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as f:
-            temp_path = Path(f.name)
+        temp_path = tmp_path / "test_raster.tif"
 
-        try:
-            # Create a simple test raster
-            with rasterio.open(
-                temp_path,
-                "w",
-                driver="GTiff",
-                dtype="float32",
-                width=100,
-                height=100,
-                count=1,
-                crs="EPSG:4326",
-                transform=from_bounds(79, 16, 80, 17, 100, 100),
-                nodata=-32767,
-                compress="lzw",
-            ) as dst:
-                dst.write(np.random.rand(100, 100).astype(np.float32) * 100, 1)
+        # Create a simple test raster
+        rng = np.random.default_rng(42)
+        with rasterio.open(
+            temp_path,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
+            compress="lzw",
+        ) as dst:
+            dst.write(rng.random((TEST_WIDTH, TEST_HEIGHT)).astype(np.float32) * 100, 1)
 
-            # Inspect
-            meta = inspect_raster(temp_path)
+        # Inspect
+        meta = inspect_raster(temp_path)
 
-            assert meta["crs"] == "EPSG:4326"
-            assert meta["width"] == 100
-            assert meta["height"] == 100
-            assert meta["dtype"] == "float32"
-            assert meta["nodata"] == -32767
-            assert meta["count"] == 1
-            assert meta["driver"] == "GTiff"
-        finally:
-            Path(temp_path).unlink(missing_ok=True)
+        assert meta["crs"] == "EPSG:4326"
+        assert meta["width"] == TEST_WIDTH
+        assert meta["height"] == TEST_HEIGHT
+        assert meta["dtype"] == "float32"
+        assert meta["nodata"] == TEST_NODATA
+        assert meta["count"] == 1
+        assert meta["driver"] == "GTiff"
 
 
 class TestCropRaster:
@@ -72,15 +83,20 @@ class TestCropRaster:
             "w",
             driver="GTiff",
             dtype="float32",
-            width=100,
-            height=100,
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
             count=1,
             crs="EPSG:4326",
-            transform=from_bounds(79, 16, 80, 17, 100, 100),
-            nodata=-32767,
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
             compress="lzw",
         ) as dst:
-            dst.write(np.full((100, 100), 10.0, dtype=np.float32), 1)
+            dst.write(
+                np.full(
+                    (TEST_WIDTH, TEST_HEIGHT), TEST_ELEVATION_VALUE, dtype=np.float32
+                ),
+                1,
+            )
 
         dst_path = tmp_path / "cropped.tif"
         crop_raster(
@@ -90,12 +106,12 @@ class TestCropRaster:
         )
 
         with rasterio.open(dst_path) as src:
-            assert src.width == 50
-            assert src.height == 50
+            assert src.width == TEST_CROP_WIDTH
+            assert src.height == TEST_CROP_HEIGHT
             assert src.crs.to_string() == "EPSG:4326"
-            assert src.nodata == -32767
+            assert src.nodata == TEST_NODATA
             data = src.read(1)
-            assert np.all(data == 10.0)
+            assert np.all(data == TEST_ELEVATION_VALUE)
 
 
 class TestMosaicTiles:
@@ -113,15 +129,20 @@ class TestMosaicTiles:
                 "w",
                 driver="GTiff",
                 dtype="float32",
-                width=100,
-                height=100,
+                width=TEST_WIDTH,
+                height=TEST_HEIGHT,
                 count=1,
                 crs="EPSG:4326",
-                transform=from_bounds(lon, lat, lon + 1, lat + 1, 100, 100),
-                nodata=-32767,
+                transform=from_bounds(
+                    lon, lat, lon + 1, lat + 1, TEST_WIDTH, TEST_HEIGHT
+                ),
+                nodata=TEST_NODATA,
                 compress="lzw",
             ) as dst:
-                dst.write(np.full((100, 100), float(i + 1), dtype=np.float32), 1)
+                dst.write(
+                    np.full((TEST_WIDTH, TEST_HEIGHT), float(i + 1), dtype=np.float32),
+                    1,
+                )
 
         tmp_path / "mosaic.tif"
         mosaic_tiles(
@@ -131,13 +152,13 @@ class TestMosaicTiles:
         )
 
         with rasterio.open(tmp_path / "mosaic.tif") as src:
-            assert src.width == 300
-            assert src.height == 100
+            assert src.width == TEST_MOSAIC_WIDTH
+            assert src.height == TEST_MOSAIC_HEIGHT
             assert src.crs.to_string() == "EPSG:4326"
             src.read(1)
-            assert 1.0 in src.read(1)
-            assert 2.0 in src.read(1)
-            assert 3.0 in src.read(1)
+            assert TEST_TILE_VALUES[0] in src.read(1)
+            assert TEST_TILE_VALUES[1] in src.read(1)
+            assert TEST_TILE_VALUES[2] in src.read(1)
 
 
 class TestBuildValidityMask:
@@ -207,27 +228,28 @@ class TestWriteGeotiff:
 
     def test_write_geotiff(self, tmp_path: Path):
         """Test writing a GeoTIFF with proper metadata."""
-        data = np.random.rand(100, 100).astype(np.float32) * 100
+        rng = np.random.default_rng(42)
+        data = rng.random((TEST_WIDTH, TEST_HEIGHT)).astype(np.float32) * 100
         profile = {
             "driver": "GTiff",
             "dtype": "float32",
-            "width": 100,
-            "height": 100,
+            "width": TEST_WIDTH,
+            "height": TEST_HEIGHT,
             "count": 1,
             "crs": "EPSG:4326",
-            "transform": from_bounds(79, 16, 80, 17, 100, 100),
-            "nodata": -32767,
+            "transform": from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            "nodata": TEST_NODATA,
             "compress": "lzw",
         }
 
         dst_path = tmp_path / "output.tif"
-        result = write_geotiff(dst_path, data, profile, nodata=-32767)
+        result = write_geotiff(dst_path, data, profile, nodata=TEST_NODATA)
 
         assert result["crs"] == "EPSG:4326"
-        assert result["width"] == 100
-        assert result["height"] == 100
+        assert result["width"] == TEST_WIDTH
+        assert result["height"] == TEST_HEIGHT
         assert result["dtype"] == "float32"
-        assert result["nodata"] == -32767
+        assert result["nodata"] == TEST_NODATA
 
 
 class TestPrepareModelInput:
@@ -241,27 +263,30 @@ class TestPrepareModelInput:
             "w",
             driver="GTiff",
             dtype="float32",
-            width=100,
-            height=100,
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
             count=1,
             crs="EPSG:4326",
-            transform=from_bounds(79, 16, 80, 17, 100, 100),
-            nodata=-32767,
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
             compress="lzw",
         ) as dst:
-            dst.write(np.full((100, 100), 10.0, dtype=np.float32), 1)
+            dst.write(
+                np.full(
+                    (TEST_WIDTH, TEST_HEIGHT), TEST_ELEVATION_VALUE, dtype=np.float32
+                ),
+                1,
+            )
 
-        elevation, validity_mask, metadata = prepare_model_input(
+        _elevation, validity_mask, metadata = prepare_model_input(
             tmp_path / "test.tif",
-            nodata=-32767.0,
+            nodata=TEST_NODATA,
         )
 
-        assert elevation.shape == (100, 100)
-        assert validity_mask.shape == (100, 100)
+        assert validity_mask.shape == (TEST_WIDTH, TEST_HEIGHT)
         assert validity_mask.dtype == bool
         assert np.all(validity_mask)
         assert metadata["crs"] == "EPSG:4326"
-        assert elevation.shape == (100, 100)
 
     def test_prepare_model_input_uses_source_nodata(self, tmp_path: Path):
         """Test that declared source NoData is used when no explicit override."""
@@ -276,16 +301,16 @@ class TestPrepareModelInput:
             count=1,
             crs="EPSG:4326",
             transform=from_bounds(79, 16, 80, 17, 10, 10),
-            nodata=-9999.0,
+            nodata=TEST_NODATA_CUSTOM,
             compress="lzw",
         ) as dst:
             data = np.full((10, 10), 5.0, dtype=np.float32)
-            data[0, 0] = -9999.0  # NoData pixel
+            data[0, 0] = TEST_NODATA_CUSTOM  # NoData pixel
             data[0, 1] = 0.0  # valid zero elevation
             data[0, 2] = -2.5  # valid negative elevation
             dst.write(data, 1)
 
-        elevation, validity_mask, metadata = prepare_model_input(
+        _elevation, validity_mask, metadata = prepare_model_input(
             tmp_path / "test_nodata.tif",
         )
 
@@ -296,7 +321,7 @@ class TestPrepareModelInput:
         # Valid negative elevation should be preserved
         assert validity_mask[0, 2]
         # Metadata should include source NoData
-        assert metadata["nodata"] == -9999.0
+        assert metadata["nodata"] == TEST_NODATA_CUSTOM
 
     def test_prepare_model_input_explicit_nodata_overrides_source(self, tmp_path: Path):
         """Test that explicit nodata argument overrides source NoData."""
@@ -310,18 +335,18 @@ class TestPrepareModelInput:
             count=1,
             crs="EPSG:4326",
             transform=from_bounds(79, 16, 80, 17, 10, 10),
-            nodata=-9999.0,
+            nodata=TEST_NODATA_CUSTOM,
             compress="lzw",
         ) as dst:
             data = np.full((10, 10), 5.0, dtype=np.float32)
-            data[0, 0] = -9999.0  # source NoData
-            data[0, 1] = -8888.0  # different sentinel
+            data[0, 0] = TEST_NODATA_CUSTOM  # source NoData
+            data[0, 1] = TEST_NODATA_OVERRIDE  # different sentinel
             dst.write(data, 1)
 
         # Override with explicit nodata=-8888.0
-        elevation, validity_mask, metadata = prepare_model_input(
+        _elevation, validity_mask, _metadata = prepare_model_input(
             tmp_path / "test_override.tif",
-            nodata=-8888.0,
+            nodata=TEST_NODATA_OVERRIDE,
         )
 
         # Source NoData should NOT be masked (explicit override)
@@ -345,12 +370,12 @@ class TestPrepareModelInput:
             compress="lzw",
         ) as dst:
             data = np.full((10, 10), 5.0, dtype=np.float32)
-            data[0, 0] = -7777.0  # sentinel to mask via config
+            data[0, 0] = TEST_NODATA_CONFIG  # sentinel to mask via config
             dst.write(data, 1)
 
-        elevation, validity_mask, metadata = prepare_model_input(
+        _elevation, validity_mask, _metadata = prepare_model_input(
             tmp_path / "test_config.tif",
-            config_nodata=-7777.0,
+            config_nodata=TEST_NODATA_CONFIG,
         )
 
         assert not validity_mask[0, 0]

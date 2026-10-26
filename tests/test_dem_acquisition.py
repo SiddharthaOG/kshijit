@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from kshitij_model.config import DEMConfig, get_config
 from kshitij_model.dem_acquisition import (
@@ -17,6 +18,15 @@ from kshitij_model.dem_acquisition import (
     DEMTileInfo,
     acquire_dem,
 )
+
+# Test constants
+TEST_TILE_SIZE = 100
+SHA256_HEX_LENGTH = 64
+TEST_LAT = 16
+TEST_LON = 80
+TEST_TILE_ID = "N16E080"
+TEST_NODATA_CUSTOM = -9999.0
+TEST_NODATA_COPERNICUS = -32767.0
 
 
 class TestDEMConfig:
@@ -35,14 +45,14 @@ class TestDEMConfig:
         """Test custom configuration."""
         config = DEMConfig(
             study_tiles=[(15, 80), (15, 81)],
-            nodata_value=-9999.0,
+            nodata_value=TEST_NODATA_CUSTOM,
         )
         assert config.study_tiles == [(15, 80), (15, 81)]
-        assert config.nodata_value == -9999.0
+        assert config.nodata_value == TEST_NODATA_CUSTOM
 
         # Also test with Copernicus documented void sentinel
-        config_copernicus = DEMConfig(nodata_value=-32767.0)
-        assert config_copernicus.nodata_value == -32767.0
+        config_copernicus = DEMConfig(nodata_value=TEST_NODATA_COPERNICUS)
+        assert config_copernicus.nodata_value == TEST_NODATA_COPERNICUS
 
     def test_empty_study_tiles_raises(self):
         """Empty study_tiles should raise ValueError."""
@@ -67,18 +77,18 @@ class TestDEMTileInfo:
     def test_tile_info_creation(self):
         """Test creating DEMTileInfo."""
         tile = DEMTileInfo(
-            tile_id="N16E080",
+            tile_id=TEST_TILE_ID,
             source_url="s3://copernicus-dem-30m/...",
             local_path="/path/to/N16E080.tif",
             file_size=47527962,
             sha256="abc123",
             retrieved_at="2024-01-01T00:00:00Z",
-            tile_lat=16,
-            tile_lon=80,
+            tile_lat=TEST_LAT,
+            tile_lon=TEST_LON,
         )
-        assert tile.tile_id == "N16E080"
-        assert tile.tile_lat == 16
-        assert tile.tile_lon == 80
+        assert tile.tile_id == TEST_TILE_ID
+        assert tile.tile_lat == TEST_LAT
+        assert tile.tile_lon == TEST_LON
 
 
 class TestAcquisitionManifest:
@@ -87,71 +97,71 @@ class TestAcquisitionManifest:
     def test_manifest_creation(self):
         """Test creating AcquisitionManifest."""
         tile = DEMTileInfo(
-            tile_id="N16E080",
+            tile_id=TEST_TILE_ID,
             source_url="s3://...",
             local_path="/path.tif",
-            file_size=100,
+            file_size=TEST_TILE_SIZE,
             sha256="abc",
             retrieved_at="2024-01-01T00:00:00Z",
-            tile_lat=16,
-            tile_lon=80,
+            tile_lat=TEST_LAT,
+            tile_lon=TEST_LON,
         )
         manifest = AcquisitionManifest(
             dataset="Test",
             version="1.0",
             retrieval_time="2024-01-01T00:00:00Z",
             tiles=[tile],
-            total_size=100,
+            total_size=TEST_TILE_SIZE,
             licence="CC BY 4.0",
             source_catalog="s3://bucket",
         )
-        assert manifest.total_size == 100
+        assert manifest.total_size == TEST_TILE_SIZE
         assert len(manifest.tiles) == 1
 
     def test_manifest_to_dict(self):
         """Test manifest serialization."""
         tile = DEMTileInfo(
-            tile_id="N16E080",
+            tile_id=TEST_TILE_ID,
             source_url="s3://...",
             local_path="/path.tif",
-            file_size=100,
+            file_size=TEST_TILE_SIZE,
             sha256="abc",
             retrieved_at="2024-01-01T00:00:00Z",
-            tile_lat=16,
-            tile_lon=80,
+            tile_lat=TEST_LAT,
+            tile_lon=TEST_LON,
         )
         manifest = AcquisitionManifest(
             dataset="Test",
             version="1.0",
             retrieval_time="2024-01-01T00:00:00Z",
             tiles=[tile],
-            total_size=100,
+            total_size=TEST_TILE_SIZE,
             licence="CC BY 4.0",
             source_catalog="s3://bucket",
         )
         d = manifest.to_dict()
         assert d["dataset"] == "Test"
         assert len(d["tiles"]) == 1
-        assert d["tiles"][0]["tile_id"] == "N16E080"
+        assert d["tiles"][0]["tile_id"] == TEST_TILE_ID
 
     def test_manifest_serialization(self):
         """Test manifest round-trip."""
         tile = DEMTileInfo(
-            tile_id="N16E080",
+            tile_id=TEST_TILE_ID,
             source_url="s3://...",
             local_path="/path.tif",
-            file_size=100,
+            file_size=TEST_TILE_SIZE,
             sha256="abc",
             retrieved_at="2024-01-01T00:00:00Z",
-            tile_lat=16,
-            tile_lon=80,
+            tile_lat=TEST_LAT,
+            tile_lon=TEST_LON,
         )
         manifest = AcquisitionManifest(
             dataset="Test",
             version="1.0",
             retrieval_time="2024-01-01T00:00:00Z",
             tiles=[tile],
-            total_size=100,
+            total_size=TEST_TILE_SIZE,
             licence="CC BY 4.0",
             source_catalog="s3://bucket",
         )
@@ -242,7 +252,7 @@ class TestDEMAcquisition:
         try:
             sha256 = acq._compute_sha256(temp_path)
             # Just verify it returns a valid hex string
-            assert len(sha256) == 64
+            assert len(sha256) == SHA256_HEX_LENGTH
             int(sha256, 16)  # Should not raise
         finally:
             temp_path.unlink()
@@ -257,15 +267,13 @@ class TestDEMAcquisition:
 
         # Tile exists
         mock_s3.head_object.return_value = {}
-        assert acq._verify_tile_exists(16, 80) is True
+        assert acq._verify_tile_exists(TEST_LAT, TEST_LON) is True
         mock_s3.head_object.assert_called_once()
 
         # Tile not found (404)
-        from botocore.exceptions import ClientError
-
         error = {"Error": {"Code": "404"}}
         mock_s3.head_object.side_effect = ClientError(error, "HeadObject")
-        assert acq._verify_tile_exists(16, 80) is False
+        assert acq._verify_tile_exists(TEST_LAT, TEST_LON) is False
 
     @patch("kshitij_model.dem_acquisition.boto3.client")
     def test_verify_tile_exists_other_error(self, mock_boto):
@@ -274,13 +282,12 @@ class TestDEMAcquisition:
         mock_boto.return_value = mock_s3
 
         acq = DEMAcquisition()
-        from botocore.exceptions import ClientError
 
         error = {"Error": {"Code": "500"}}
         mock_s3.head_object.side_effect = ClientError(error, "HeadObject")
 
         with pytest.raises(ClientError):
-            acq._verify_tile_exists(16, 80)
+            acq._verify_tile_exists(TEST_LAT, TEST_LON)
 
 
 class TestDEMAcquisitionIntegration:
@@ -293,11 +300,11 @@ class TestDEMAcquisitionIntegration:
             mock_boto.return_value = mock_s3
 
             # Mock head_object for tile existence
-            mock_s3.head_object.return_value = {"ContentLength": 100}
+            mock_s3.head_object.return_value = {"ContentLength": TEST_TILE_SIZE}
 
             # Mock download_file
-            def mock_download(Bucket, Key, Filename, Config=None):
-                Path(Filename).write_bytes(b"x" * 100)
+            def mock_download(*_args, **_kwargs):
+                Path(_kwargs["Filename"]).write_bytes(b"x" * TEST_TILE_SIZE)
 
             mock_s3.download_file.side_effect = mock_download
 
@@ -307,23 +314,22 @@ class TestDEMAcquisitionIntegration:
             raw_dir.mkdir(parents=True, exist_ok=True)
 
             # Pre-create cached files
-            tile_id = "N16E080"
-            dest = raw_dir / f"{tile_id}.tif"
-            dest.write_bytes(b"x" * 100)
+            dest = raw_dir / f"{TEST_TILE_ID}.tif"
+            dest.write_bytes(b"x" * TEST_TILE_SIZE)
 
-            cache_meta = cache_dir / "N16E080.json"
+            cache_meta = cache_dir / f"{TEST_TILE_ID}.json"
             cache_meta.parent.mkdir(parents=True, exist_ok=True)
             cache_meta.write_text(
                 json.dumps(
                     {
-                        "tile_id": tile_id,
+                        "tile_id": TEST_TILE_ID,
                         "source_url": "s3://...",
                         "local_path": str(dest),
-                        "file_size": 100,
-                        "sha256": hashlib.sha256(b"x" * 100).hexdigest(),
+                        "file_size": TEST_TILE_SIZE,
+                        "sha256": hashlib.sha256(b"x" * TEST_TILE_SIZE).hexdigest(),
                         "retrieved_at": "2024-01-01T00:00:00Z",
-                        "tile_lat": 16,
-                        "tile_lon": 80,
+                        "tile_lat": TEST_LAT,
+                        "tile_lon": TEST_LON,
                     }
                 )
             )
@@ -331,11 +337,11 @@ class TestDEMAcquisitionIntegration:
             acq = DEMAcquisition(cache_dir=cache_dir, raw_dir=raw_dir)
             acq.s3 = mock_s3
 
-            manifest = acq.acquire_study_area([(16, 80)])
+            manifest = acq.acquire_study_area([(TEST_LAT, TEST_LON)])
 
             assert len(manifest.tiles) == 1
-            assert manifest.tiles[0].tile_id == "N16E080"
-            assert manifest.total_size == 100
+            assert manifest.tiles[0].tile_id == TEST_TILE_ID
+            assert manifest.total_size == TEST_TILE_SIZE
 
     @patch("kshitij_model.dem_acquisition.boto3.client")
     def test_acquire_study_area_download(self, mock_boto, tmp_path):
@@ -344,11 +350,11 @@ class TestDEMAcquisitionIntegration:
         mock_boto.return_value = mock_s3
 
         # Mock head_object for existence and size
-        mock_s3.head_object.return_value = {"ContentLength": 100}
+        mock_s3.head_object.return_value = {"ContentLength": TEST_TILE_SIZE}
 
         # Mock download_file
-        def mock_download(Bucket, Key, Filename, Config=None):
-            Path(Filename).write_bytes(b"x" * 100)
+        def mock_download(*_args, **_kwargs):
+            Path(_kwargs["Filename"]).write_bytes(b"x" * TEST_TILE_SIZE)
 
         mock_s3.download_file.side_effect = mock_download
 
@@ -357,12 +363,15 @@ class TestDEMAcquisitionIntegration:
         )
         acq.s3 = mock_s3
 
-        manifest = acq.acquire_study_area([(16, 80)])
+        manifest = acq.acquire_study_area([(TEST_LAT, TEST_LON)])
 
         assert len(manifest.tiles) == 1
-        assert manifest.tiles[0].tile_id == "N16E080"
-        assert manifest.total_size == 100
-        assert manifest.tiles[0].sha256 == hashlib.sha256(b"x" * 100).hexdigest()
+        assert manifest.tiles[0].tile_id == TEST_TILE_ID
+        assert manifest.total_size == TEST_TILE_SIZE
+        assert (
+            manifest.tiles[0].sha256
+            == hashlib.sha256(b"x" * TEST_TILE_SIZE).hexdigest()
+        )
 
 
 class TestAcquireDemFunction:
