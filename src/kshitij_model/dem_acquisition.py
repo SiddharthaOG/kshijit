@@ -79,9 +79,7 @@ class DEMAcquisitionError(Exception):
     def download_failed(
         cls, tile_id: str, max_retries: int, err: Exception
     ) -> DEMAcquisitionError:
-        exc = cls(f"Failed to download {tile_id} after {max_retries} attempts: {err}")
-        exc.__cause__ = err
-        return exc
+        return cls(f"Failed to download {tile_id} after {max_retries} attempts: {err}")
 
     @classmethod
     def exhausted_retries(cls, tile_id: str) -> DEMAcquisitionError:
@@ -108,15 +106,21 @@ class DEMAcquisition:
         (16, 81),  # N16E081
     ]
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         cache_dir: str | Path = "data/cache",
         raw_dir: str | Path = "data/raw/dem",
         config: DEMConfig | None = None,
+        timeout: int = 300,
+        max_retries: int = 3,
+        retry_delay: float = 5.0,
     ):
         self.cache_dir = Path(cache_dir)
         self.raw_dir = Path(raw_dir)
         self.config = config or DEMConfig()
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
         # Ensure directories exist
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -178,7 +182,7 @@ class DEMAcquisition:
         key = self._s3_key(lat, lon)
         tile_id = self._tile_id(lat, lon)
 
-        for attempt in range(1, self.config.max_retries + 1):
+        for attempt in range(1, self.max_retries + 1):
             try:
                 # Get object size first
                 head = self.s3.head_object(Bucket=self.BUCKET, Key=key)
@@ -220,17 +224,17 @@ class DEMAcquisition:
                 error_code = e.response["Error"]["Code"]
                 if error_code == "404":
                     raise DEMAcquisitionError.tile_not_found(tile_id) from e
-                if attempt == self.config.max_retries:
+                if attempt == self.max_retries:
                     raise DEMAcquisitionError.download_failed(
-                        tile_id, self.config.max_retries, e
+                        tile_id, self.max_retries, e
                     ) from e
-                time.sleep(self.config.retry_delay * attempt)
+                time.sleep(self.retry_delay * attempt)
             except OSError as e:
-                if attempt == self.config.max_retries:
+                if attempt == self.max_retries:
                     raise DEMAcquisitionError.download_failed(
-                        tile_id, self.config.max_retries, e
+                        tile_id, self.max_retries, e
                     ) from e
-                time.sleep(self.config.retry_delay * attempt)
+                time.sleep(self.retry_delay * attempt)
 
         raise DEMAcquisitionError.exhausted_retries(tile_id)
 

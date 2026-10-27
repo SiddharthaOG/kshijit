@@ -166,60 +166,48 @@ class TestBuildValidityMask:
 
     def test_nan_masked(self):
         """NaN values should be masked as invalid."""
-        np.array([[1.0, np.nan, 3.0]], dtype=float)
-        mask = build_validity_mask(
-            np.array([[1.0, np.nan, 3.0]]), nodata=None, config_nodata=None
-        )
+        data = np.array([[1.0, np.nan, 3.0]], dtype=float)
+        mask = build_validity_mask(data, nodata=None, config_nodata=None)
         assert mask[0, 0]  # valid
         assert not mask[0, 1]  # NaN masked
         assert mask[0, 2]  # valid
 
     def test_inf_masked(self):
         """Positive infinity should be masked."""
-        np.array([[1.0, np.inf, 3.0]], dtype=float)
-        mask = build_validity_mask(
-            np.array([[1.0, np.inf, 3.0]]), nodata=None, config_nodata=None
-        )
+        data = np.array([[1.0, np.inf, 3.0]], dtype=float)
+        mask = build_validity_mask(data, nodata=None, config_nodata=None)
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
 
     def test_negative_inf_masked(self):
         """Negative infinity should be masked."""
-        np.array([[1.0, -np.inf, 3.0]], dtype=float)
-        mask = build_validity_mask(
-            np.array([[1.0, -np.inf, 3.0]]), nodata=None, config_nodata=None
-        )
+        data = np.array([[1.0, -np.inf, 3.0]], dtype=float)
+        mask = build_validity_mask(data, nodata=None, config_nodata=None)
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
 
     def test_sentinel_masked(self):
         """Sentinel value should be masked."""
-        np.array([[1.0, -32768.0, 3.0]], dtype=float)
-        mask = build_validity_mask(
-            np.array([[1.0, -32768.0, 3.0]]), nodata=-32768.0, config_nodata=None
-        )
+        data = np.array([[1.0, -32768.0, 3.0]], dtype=float)
+        mask = build_validity_mask(data, nodata=-32768.0, config_nodata=None)
         assert mask[0, 0]
         assert not mask[0, 1]
         assert mask[0, 2]
 
     def test_zero_preserved(self):
         """Zero elevation should be preserved as valid."""
-        np.array([[0.0, 1.0, 2.0]], dtype=float)
-        mask = build_validity_mask(
-            np.array([[0.0, 1.0, 2.0]]), nodata=-32768.0, config_nodata=None
-        )
+        data = np.array([[0.0, 1.0, 2.0]], dtype=float)
+        mask = build_validity_mask(data, nodata=-32768.0, config_nodata=None)
         assert mask[0, 0]
         assert mask[0, 1]
         assert mask[0, 2]
 
     def test_negative_elevation_preserved(self):
         """Negative elevations (coastal depressions) should be preserved."""
-        np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
-        mask = build_validity_mask(
-            np.array([[-4.5, -1.5, 0.0, 2.0]]), nodata=-32768.0, config_nodata=None
-        )
+        data = np.array([[-4.5, -1.5, 0.0, 2.0]], dtype=float)
+        mask = build_validity_mask(data, nodata=-32768.0, config_nodata=None)
         assert all(mask[0])
 
 
@@ -278,15 +266,17 @@ class TestPrepareModelInput:
                 1,
             )
 
-        _elevation, validity_mask, metadata = prepare_model_input(
+        elevation, validity_mask, metadata = prepare_model_input(
             tmp_path / "test.tif",
             nodata=TEST_NODATA,
         )
 
+        assert elevation.shape == (TEST_WIDTH, TEST_HEIGHT)
         assert validity_mask.shape == (TEST_WIDTH, TEST_HEIGHT)
         assert validity_mask.dtype == bool
         assert np.all(validity_mask)
         assert metadata["crs"] == "EPSG:4326"
+        assert elevation.shape == (TEST_WIDTH, TEST_HEIGHT)
 
     def test_prepare_model_input_uses_source_nodata(self, tmp_path: Path):
         """Test that declared source NoData is used when no explicit override."""
@@ -310,7 +300,7 @@ class TestPrepareModelInput:
             data[0, 2] = -2.5  # valid negative elevation
             dst.write(data, 1)
 
-        _elevation, validity_mask, metadata = prepare_model_input(
+        elevation, validity_mask, metadata = prepare_model_input(
             tmp_path / "test_nodata.tif",
         )
 
@@ -322,6 +312,7 @@ class TestPrepareModelInput:
         assert validity_mask[0, 2]
         # Metadata should include source NoData
         assert metadata["nodata"] == TEST_NODATA_CUSTOM
+        assert elevation.shape == (10, 10)
 
     def test_prepare_model_input_explicit_nodata_overrides_source(self, tmp_path: Path):
         """Test that explicit nodata argument overrides source NoData."""
@@ -344,7 +335,7 @@ class TestPrepareModelInput:
             dst.write(data, 1)
 
         # Override with explicit nodata=-8888.0
-        _elevation, validity_mask, _metadata = prepare_model_input(
+        elevation, validity_mask, _metadata = prepare_model_input(
             tmp_path / "test_override.tif",
             nodata=TEST_NODATA_OVERRIDE,
         )
@@ -353,6 +344,7 @@ class TestPrepareModelInput:
         assert validity_mask[0, 0]
         # Explicit NoData should be masked
         assert not validity_mask[0, 1]
+        assert elevation.shape == (10, 10)
 
     def test_prepare_model_input_config_nodata_fallback(self, tmp_path: Path):
         """Test config_nodata is used when explicit nodata is None but source has no NoData."""
@@ -373,13 +365,14 @@ class TestPrepareModelInput:
             data[0, 0] = TEST_NODATA_CONFIG  # sentinel to mask via config
             dst.write(data, 1)
 
-        _elevation, validity_mask, _metadata = prepare_model_input(
+        elevation, validity_mask, _metadata = prepare_model_input(
             tmp_path / "test_config.tif",
             config_nodata=TEST_NODATA_CONFIG,
         )
 
         assert not validity_mask[0, 0]
         assert validity_mask[0, 1]
+        assert elevation.shape == (10, 10)
 
 
 if __name__ == "__main__":

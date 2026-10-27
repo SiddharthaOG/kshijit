@@ -114,13 +114,14 @@ def _bounds_to_window(
     return from_bounds(left, bottom, right, top, transform=src.transform)
 
 
-def crop_raster(
+def crop_raster(  # noqa: PLR0913, PLR0917
     src_path: Path | str,
     dst_path: Path | str,
     bounds: tuple[float, float, float, float],
-    *,
     nodata: float | None = None,
+    dst_crs: str | None = None,
     dst_nodata: float | None = None,
+    compression: str = "lzw",
 ) -> dict[str, Any]:
     """Crop a raster to the given bounds.
 
@@ -129,12 +130,26 @@ def crop_raster(
         dst_path: Path to output cropped raster.
         bounds: (min_lon, min_lat, max_lon, max_lat) in WGS84 (EPSG:4326).
         nodata: NoData value to use for output (default: from source).
+        dst_crs: Output CRS (default: same as source).
         dst_nodata: NoData value for output (default: from source or -32767).
+        compression: Compression method for output (default: lzw).
 
     Returns:
         Dictionary with output metadata.
     """
     with rasterio.open(src_path) as src:
+        # Get source CRS
+        src_crs = src.crs or "EPSG:4326"
+
+        # Determine output CRS
+        dst_crs = dst_crs or src_crs
+
+        # Calculate output bounds in destination CRS
+        # For now, assume source and destination CRS are the same (EPSG:4326)
+        # If they differ, we'd need to reproject bounds
+        if dst_crs != src.crs:
+            raise NotImplementedError("Reprojection not yet supported")
+
         # Calculate window for cropping
         left, bottom, right, top = bounds
         window = from_bounds(left, bottom, right, top, transform=src.transform)
@@ -152,7 +167,7 @@ def crop_raster(
                 "height": data.shape[0],
                 "width": data.shape[1],
                 "transform": new_transform,
-                "compress": "lzw",
+                "compress": compression,
                 "driver": "GTiff",
             }
         )
@@ -171,7 +186,7 @@ def crop_raster(
 
         with rasterio.open(dst_path, "w", **profile) as dst:
             if hasattr(data, "mask"):
-                dst.write(data.filled(profile.get("nodata", -32767)), 1)
+                dst.write(data.filled(profile.get("nodata", DEFAULT_NODATA)), 1)
             else:
                 dst.write(data, 1)
 
@@ -230,11 +245,12 @@ def build_validity_mask(
     return valid
 
 
-def mosaic_tiles(
+def mosaic_tiles(  # noqa: PLR0913, PLR0917
     tile_paths: list[Path | str],
     dst_path: Path | str,
-    *,
     bounds: tuple[float, float, float, float] | None = None,
+    dst_nodata: float = DEFAULT_NODATA,
+    compression: str = "lzw",
     resampling: Resampling = Resampling.nearest,
 ) -> dict[str, Any]:
     """Mosaic multiple raster tiles into a single output.
@@ -277,9 +293,9 @@ def mosaic_tiles(
                 "height": mosaic_data.shape[1],
                 "width": mosaic_data.shape[2],
                 "transform": mosaic_transform,
-                "compress": "lzw",
+                "compress": compression,
                 "driver": "GTiff",
-                "nodata": DEFAULT_NODATA,
+                "nodata": dst_nodata,
             }
         )
 
@@ -289,7 +305,7 @@ def mosaic_tiles(
 
         with rasterio.open(dst_path, "w", **profile) as dst:
             # Replace NaN with nodata value for output
-            output_data = np.where(np.isnan(mosaic_data), DEFAULT_NODATA, mosaic_data)
+            output_data = np.where(np.isnan(mosaic_data), dst_nodata, mosaic_data)
             # merge() returns (bands, height, width); write expects (height, width) for single band
             if (
                 output_data.ndim == EXPECTED_NDIM

@@ -43,11 +43,8 @@ class InvalidWaterLevelError(ConnectivityError, ValueError, TypeError):
         )
 
     @classmethod
-    def too_large(cls, err: Exception | None = None) -> InvalidWaterLevelError:
-        exc = cls("water_level is too large to convert to float.")
-        if err:
-            exc.__cause__ = err
-        return exc
+    def too_large(cls) -> InvalidWaterLevelError:
+        return cls("water_level is too large to convert to float.")
 
     @classmethod
     def not_finite(cls) -> InvalidWaterLevelError:
@@ -161,7 +158,7 @@ def _validate_water_level(water_level) -> float:
     try:
         wl = float(water_level)
     except OverflowError as err:
-        raise InvalidWaterLevelError.too_large(err) from err
+        raise InvalidWaterLevelError.too_large() from err
     if not np.isfinite(wl):
         raise InvalidWaterLevelError.not_finite() from None
     return wl
