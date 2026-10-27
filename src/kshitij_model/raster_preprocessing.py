@@ -152,7 +152,7 @@ def crop_raster(  # noqa: PLR0913, PLR0917
 
         # Calculate window for cropping
         left, bottom, right, top = bounds
-        window = from_bounds_window(left, bottom, right, top, transform=src.transform)
+        window = from_bounds(left, bottom, right, top, transform=src.transform)
 
         # Read data within window
         data = src.read(1, window=window, masked=True)
@@ -245,7 +245,7 @@ def build_validity_mask(
     return valid
 
 
-def mosaic_tiles(
+def mosaic_tiles(  # noqa: PLR0913, PLR0917
     tile_paths: list[Path | str],
     dst_path: Path | str,
     bounds: tuple[float, float, float, float] | None = None,
@@ -307,7 +307,10 @@ def mosaic_tiles(
             # Replace NaN with nodata value for output
             output_data = np.where(np.isnan(mosaic_data), dst_nodata, mosaic_data)
             # merge() returns (bands, height, width); write expects (height, width) for single band
-            if output_data.ndim == 3 and output_data.shape[0] == 1:
+            if (
+                output_data.ndim == EXPECTED_NDIM
+                and output_data.shape[0] == SINGLE_BAND
+            ):
                 output_data = output_data[0]
             dst.write(output_data.astype(src.dtypes[0]), 1)
 
