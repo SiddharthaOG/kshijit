@@ -419,8 +419,8 @@ class TestCropRasterRegression:
         )
 
         with rasterio.open(dst_path) as src:
-            # Check that compression was applied (we can't directly read compression
-            # from rasterio, but we can verify the file was written successfully)
+            # Check that compression was applied by inspecting the profile
+            assert src.profile.get("compress") == "deflate"
             assert src.width == TEST_CROP_WIDTH
             assert src.height == TEST_CROP_HEIGHT
 
@@ -572,6 +572,8 @@ class TestMosaicTilesRegression:
         )
 
         with rasterio.open(dst_path) as src:
+            # Check that compression was applied by inspecting the profile
+            assert src.profile.get("compress") == "deflate"
             assert src.width == TEST_MOSAIC_WIDTH_2TILE
             assert src.height == TEST_MOSAIC_HEIGHT
 

@@ -15,6 +15,7 @@ from kshitij_model.config import DEMConfig, get_config
 from kshitij_model.dem_acquisition import (
     AcquisitionManifest,
     DEMAcquisition,
+    DEMAcquisitionError,
     DEMTileInfo,
     acquire_dem,
 )
@@ -34,6 +35,10 @@ TEST_MAX_RETRIES = 7
 TEST_RETRY_DELAY = 2.5
 TEST_MAX_RETRIES_SMALL = 5
 TEST_RETRY_DELAY_SMALL = 1.23
+
+# Retry test constants
+RETRY_ATTEMPTS = 3
+RETRY_SLEEP_CALLS = 2
 
 
 class TestDEMConfig:
@@ -450,6 +455,56 @@ class TestDEMAcquisitionRegression:
         acq = DEMAcquisition(retry_delay=TEST_RETRY_DELAY_SMALL)
         assert acq.retry_delay == TEST_RETRY_DELAY_SMALL
 
+    @patch("kshitij_model.dem_acquisition.boto3.client")
+    def test_retry_behavior_mocked(self, mock_boto):
+        """Test retry behavior: mock download failure and verify retry count and delay."""
+        mock_s3 = MagicMock()
+        mock_boto.return_value = mock_s3
 
-# Register pytest marks
-pytestmark = pytest.mark.integration
+        # head_object succeeds on first call (for size check)
+        mock_s3.head_object.return_value = {"ContentLength": TEST_TILE_SIZE}
+
+        # Track download attempts and sleep calls
+        call_count = 0
+        sleep_calls = []
+
+        def mock_download(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= RETRY_ATTEMPTS:
+                raise OSError  # Simulated download failure
+
+        def mock_sleep(duration):
+            sleep_calls.append(duration)
+
+        mock_s3.download_file.side_effect = mock_download
+
+        acq = DEMAcquisition(
+            cache_dir="data/cache",
+            raw_dir="data/raw/dem",
+            max_retries=RETRY_ATTEMPTS,
+            retry_delay=0.01,
+        )
+        acq.s3 = mock_s3
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            dest_path = Path(tmp.name)
+
+        try:
+            # Patch time.sleep and TransferConfig to capture calls and avoid real boto3
+            with (
+                patch("time.sleep", side_effect=mock_sleep),
+                patch("boto3.s3.transfer.TransferConfig", return_value=MagicMock()),
+                pytest.raises(DEMAcquisitionError, match="Failed to download"),
+            ):
+                acq._download_with_retries(TEST_LAT, TEST_LON, dest_path)
+        finally:
+            dest_path.unlink(missing_ok=True)
+
+        # Verify retry count: initial attempt + 2 retries = 3 total attempts
+        assert call_count == RETRY_ATTEMPTS
+
+        # Verify sleep was called with correct delays: 0.01*1, 0.01*2
+        assert len(sleep_calls) == RETRY_SLEEP_CALLS
+        assert sleep_calls[0] == pytest.approx(0.01, rel=0.1)
+        assert sleep_calls[1] == pytest.approx(0.02, rel=0.1)
