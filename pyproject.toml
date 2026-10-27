@@ -19,7 +19,6 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
-    "boto3",
 ]
 dem = ["boto3"]
 

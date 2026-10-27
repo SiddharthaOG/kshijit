@@ -82,7 +82,7 @@ All rasters (DEM, model output, reference inundation) must share a common grid b
 
 | Layer | NoData Value | Treatment |
 |-------|--------------|-----------|
-| **Copernicus DEM** | None declared in COG; auxiliary HEM suggests -32768 | Use `build_validity_mask()` with explicit `nodata=-32768` |
+| **Copernicus DEM** | None declared in COG; auxiliary HEM suggests -32768; official XML specifies -32767 | Use `build_validity_mask()` with explicit `nodata=-32767` |
 | **Model output** | -32767 (written by preprocessing) | Already masked |
 | **Reference inundation** | PDF background / no-data | Digitise as binary mask (1=inundated, 0=dry, NaN=outside AOI) |
 
@@ -178,7 +178,7 @@ If model coverage ≠ reference coverage (different AOI bounds), compute metrics
   - [ ] Approach B: Use observed Krishna River stage at Vijayawada gauge on 13 Sep 2024 (if available)
   - [ ] Document chosen approach clearly
 - [ ] **Run model** using `prepare_model_input()` + `compute_flood_extent()`
-  - [ ] Pass DEM elevation array, river source mask, water level, NoData=-32768
+  - [ ] Pass DEM elevation array, river source mask, water level, NoData=-32767
   - [ ] Obtain boolean flood extent array
 
 ### Phase C: Comparison & Metrics
