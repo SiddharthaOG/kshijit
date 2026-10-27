@@ -197,20 +197,20 @@ def test_invalid_dimensions_raise():
 
 def test_mismatched_shapes_raise():
     """Arrays with different shapes raise ValueError."""
-    with pytest.raises(ValueError):
-        elevation = np.array([[1, 2], [3, 4]], dtype=float)
-        source = np.array([[True, False, False]], dtype=bool)
+    elevation = np.array([[1, 2], [3, 4]], dtype=float)
+    source = np.array([[True, False, False]], dtype=bool)
+    with pytest.raises(ValueError, match="same shape"):
         compute_flood_extent(elevation, source, water_level=1)
 
 
 def test_empty_grid_raises():
     """Empty arrays raise ValueError."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="non-empty"):
         compute_flood_extent(
             np.array([]).reshape(0, 0), np.array([[False]]), water_level=1
         )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="non-empty"):
         compute_flood_extent(
             np.array([[1, 2]]), np.array([]).reshape(0, 0), water_level=1
         )
@@ -218,12 +218,12 @@ def test_empty_grid_raises():
 
 def test_non_finite_water_level_raises():
     """Non-finite water_level raises ValueError."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="finite"):
         compute_flood_extent(
             np.array([[1.0]]), np.array([[True]]), water_level=float("nan")
         )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="finite"):
         compute_flood_extent(
             np.array([[1.0]]), np.array([[True]]), water_level=float("inf")
         )
@@ -509,7 +509,7 @@ def test_flooded_cell_validity():
     result = compute_flood_extent(elevation, source, water_level=water_level)
     # Every flooded cell must have finite elevation <= water_level
     flooded_indices = np.where(result)
-    for r, c in zip(*flooded_indices):
+    for r, c in zip(*flooded_indices, strict=False):
         assert np.isfinite(elevation[r, c]), (
             f"Flooded cell ({r},{c}) has non-finite elevation"
         )

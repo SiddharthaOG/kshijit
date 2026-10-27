@@ -14,7 +14,12 @@ import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.merge import merge
-from rasterio.windows import from_bounds as from_bounds_window
+from rasterio.windows import from_bounds
+
+# Constants
+DEFAULT_NODATA = -32767
+SINGLE_BAND = 1
+EXPECTED_NDIM = 3
 
 
 @dataclass
@@ -77,10 +82,7 @@ def inspect_raster(path: Path | str) -> dict[str, Any]:
         # Read first band for statistics
         if src.count > 0:
             data = src.read(1, masked=True)
-            if hasattr(data, "mask"):
-                valid_data = data[~data.mask]
-            else:
-                valid_data = data.flatten()
+            valid_data = data[~data.mask] if hasattr(data, "mask") else data.flatten()
             if valid_data.size > 0:
                 meta["min"] = float(np.nanmin(valid_data))
                 meta["max"] = float(np.nanmax(valid_data))
@@ -109,11 +111,10 @@ def _bounds_to_window(
     """
     # Convert geographic bounds to pixel window
     left, bottom, right, top = bounds
-    window = from_bounds_window(left, bottom, right, top, transform=src.transform)
-    return window
+    return from_bounds(left, bottom, right, top, transform=src.transform)
 
 
-def crop_raster(
+def crop_raster(  # noqa: PLR0913, PLR0917
     src_path: Path | str,
     dst_path: Path | str,
     bounds: tuple[float, float, float, float],
@@ -166,7 +167,7 @@ def crop_raster(
                 "height": data.shape[0],
                 "width": data.shape[1],
                 "transform": new_transform,
-                "compress": "lzw",
+                "compress": compression,
                 "driver": "GTiff",
             }
         )
@@ -177,7 +178,7 @@ def crop_raster(
         elif nodata is not None:
             profile["nodata"] = nodata
         else:
-            profile["nodata"] = -32767
+            profile["nodata"] = DEFAULT_NODATA
 
         # Write output
         output_path = Path(dst_path)
@@ -185,7 +186,7 @@ def crop_raster(
 
         with rasterio.open(dst_path, "w", **profile) as dst:
             if hasattr(data, "mask"):
-                dst.write(data.filled(profile.get("nodata", -32767)), 1)
+                dst.write(data.filled(profile.get("nodata", DEFAULT_NODATA)), 1)
             else:
                 dst.write(data, 1)
 
@@ -248,7 +249,7 @@ def mosaic_tiles(
     tile_paths: list[Path | str],
     dst_path: Path | str,
     bounds: tuple[float, float, float, float] | None = None,
-    dst_nodata: float = -32767,
+    dst_nodata: float = DEFAULT_NODATA,
     compression: str = "lzw",
     resampling: Resampling = Resampling.nearest,
 ) -> dict[str, Any]:
@@ -292,9 +293,9 @@ def mosaic_tiles(
                 "height": mosaic_data.shape[1],
                 "width": mosaic_data.shape[2],
                 "transform": mosaic_transform,
-                "compress": "lzw",
+                "compress": compression,
                 "driver": "GTiff",
-                "nodata": -32767,
+                "nodata": dst_nodata,
             }
         )
 
@@ -304,7 +305,7 @@ def mosaic_tiles(
 
         with rasterio.open(dst_path, "w", **profile) as dst:
             # Replace NaN with nodata value for output
-            output_data = np.where(np.isnan(mosaic_data), -32767, mosaic_data)
+            output_data = np.where(np.isnan(mosaic_data), dst_nodata, mosaic_data)
             # merge() returns (bands, height, width); write expects (height, width) for single band
             if output_data.ndim == 3 and output_data.shape[0] == 1:
                 output_data = output_data[0]
