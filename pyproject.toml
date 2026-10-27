@@ -21,6 +21,7 @@ test = [
     "pytest",
     "boto3",
 ]
+dem = ["boto3"]
 
 [tool.setuptools.packages.find]
 where = [
