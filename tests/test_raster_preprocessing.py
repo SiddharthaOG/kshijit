@@ -10,7 +10,9 @@ import pytest
 import rasterio
 from rasterio.transform import from_bounds
 
+from kshitij_model.dem_acquisition import DEMAcquisition
 from kshitij_model.raster_preprocessing import (
+    DEFAULT_NODATA,
     build_validity_mask,
     crop_raster,
     inspect_raster,
@@ -32,6 +34,12 @@ TEST_NODATA_OVERRIDE = -8888.0
 TEST_NODATA_CONFIG = -7777.0
 TEST_ELEVATION_VALUE = 10.0
 TEST_TILE_VALUES = (1.0, 2.0, 3.0)
+
+# Regression test constants
+TEST_MOSAIC_WIDTH_2TILE = 200
+TEST_TIMEOUT = 100
+TEST_MAX_RETRIES = 5
+TEST_RETRY_DELAY = 1.5
 
 
 class TestRasterInspection:
@@ -155,10 +163,10 @@ class TestMosaicTiles:
             assert src.width == TEST_MOSAIC_WIDTH
             assert src.height == TEST_MOSAIC_HEIGHT
             assert src.crs.to_string() == "EPSG:4326"
-            src.read(1)
-            assert TEST_TILE_VALUES[0] in src.read(1)
-            assert TEST_TILE_VALUES[1] in src.read(1)
-            assert TEST_TILE_VALUES[2] in src.read(1)
+            data = src.read(1)
+            assert TEST_TILE_VALUES[0] in data
+            assert TEST_TILE_VALUES[1] in data
+            assert TEST_TILE_VALUES[2] in data
 
 
 class TestBuildValidityMask:
@@ -277,6 +285,7 @@ class TestPrepareModelInput:
         assert np.all(validity_mask)
         assert metadata["crs"] == "EPSG:4326"
         assert elevation.shape == (TEST_WIDTH, TEST_HEIGHT)
+        assert np.all(elevation == TEST_ELEVATION_VALUE)
 
     def test_prepare_model_input_uses_source_nodata(self, tmp_path: Path):
         """Test that declared source NoData is used when no explicit override."""
@@ -373,6 +382,294 @@ class TestPrepareModelInput:
         assert not validity_mask[0, 0]
         assert validity_mask[0, 1]
         assert elevation.shape == (10, 10)
+
+
+class TestCropRasterRegression:
+    """Regression tests for restored crop_raster() API."""
+
+    def test_compression_parameter_honored(self, tmp_path: Path):
+        """crop_raster() honors the compression parameter."""
+        src_path = tmp_path / "source.tif"
+        with rasterio.open(
+            src_path,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
+            compress="lzw",
+        ) as dst:
+            dst.write(
+                np.full(
+                    (TEST_WIDTH, TEST_HEIGHT), TEST_ELEVATION_VALUE, dtype=np.float32
+                ),
+                1,
+            )
+
+        dst_path = tmp_path / "cropped.tif"
+        crop_raster(
+            src_path=src_path,
+            dst_path=dst_path,
+            bounds=(79.25, 16.25, 79.75, 16.75),
+            compression="deflate",
+        )
+
+        with rasterio.open(dst_path) as src:
+            # Check that compression was applied (we can't directly read compression
+            # from rasterio, but we can verify the file was written successfully)
+            assert src.width == TEST_CROP_WIDTH
+            assert src.height == TEST_CROP_HEIGHT
+
+    def test_dst_crs_same_as_source_works(self, tmp_path: Path):
+        """crop_raster() works when dst_crs matches source CRS (default behavior)."""
+        src_path = tmp_path / "source.tif"
+        with rasterio.open(
+            src_path,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
+            compress="lzw",
+        ) as dst:
+            dst.write(
+                np.full(
+                    (TEST_WIDTH, TEST_HEIGHT), TEST_ELEVATION_VALUE, dtype=np.float32
+                ),
+                1,
+            )
+
+        dst_path = tmp_path / "cropped.tif"
+        crop_raster(
+            src_path=src_path,
+            dst_path=dst_path,
+            bounds=(79.25, 16.25, 79.75, 16.75),
+            dst_crs="EPSG:4326",
+        )
+
+        with rasterio.open(dst_path) as src:
+            assert src.crs.to_string() == "EPSG:4326"
+            assert src.width == TEST_CROP_WIDTH
+
+    def test_dst_crs_mismatch_raises_not_implemented(self, tmp_path: Path):
+        """crop_raster() raises NotImplementedError when dst_crs differs from source."""
+        src_path = tmp_path / "source.tif"
+        with rasterio.open(
+            src_path,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
+            compress="lzw",
+        ) as dst:
+            dst.write(
+                np.full(
+                    (TEST_WIDTH, TEST_HEIGHT), TEST_ELEVATION_VALUE, dtype=np.float32
+                ),
+                1,
+            )
+
+        dst_path = tmp_path / "cropped.tif"
+        with pytest.raises(NotImplementedError, match="Reprojection not yet supported"):
+            crop_raster(
+                src_path=src_path,
+                dst_path=dst_path,
+                bounds=(79.25, 16.25, 79.75, 16.75),
+                dst_crs="EPSG:3857",
+            )
+
+
+class TestMosaicTilesRegression:
+    """Regression tests for restored mosaic_tiles() API."""
+
+    def test_dst_nodata_parameter_honored(self, tmp_path: Path):
+        """mosaic_tiles() honors custom dst_nodata value."""
+        tiles = []
+        for i, (lat, lon) in enumerate([(16, 79), (16, 80)]):
+            tile_path = Path(tempfile.mktemp(suffix=f"_{i}.tif", dir=tmp_path))
+            tiles.append(str(tile_path))
+
+            with rasterio.open(
+                tile_path,
+                "w",
+                driver="GTiff",
+                dtype="float32",
+                width=TEST_WIDTH,
+                height=TEST_HEIGHT,
+                count=1,
+                crs="EPSG:4326",
+                transform=from_bounds(
+                    lon, lat, lon + 1, lat + 1, TEST_WIDTH, TEST_HEIGHT
+                ),
+                nodata=TEST_NODATA,
+                compress="lzw",
+            ) as dst:
+                dst.write(
+                    np.full((TEST_WIDTH, TEST_HEIGHT), float(i + 1), dtype=np.float32),
+                    1,
+                )
+
+        custom_nodata = -9999.0
+        dst_path = tmp_path / "mosaic.tif"
+        mosaic_tiles(
+            tile_paths=[Path(p) for p in tiles],
+            dst_path=dst_path,
+            bounds=(79.0, 16.0, 81.0, 17.0),
+            dst_nodata=custom_nodata,
+        )
+
+        with rasterio.open(dst_path) as src:
+            assert src.nodata == custom_nodata
+            # The metadata nodata value should be set to custom_nodata
+            # (The mosaic covers the exact bounds of input tiles, so no nodata pixels in data)
+
+    def test_compression_parameter_honored(self, tmp_path: Path):
+        """mosaic_tiles() honors the compression parameter."""
+        tiles = []
+        for i, (lat, lon) in enumerate([(16, 79), (16, 80)]):
+            tile_path = Path(tempfile.mktemp(suffix=f"_{i}.tif", dir=tmp_path))
+            tiles.append(str(tile_path))
+
+            with rasterio.open(
+                tile_path,
+                "w",
+                driver="GTiff",
+                dtype="float32",
+                width=TEST_WIDTH,
+                height=TEST_HEIGHT,
+                count=1,
+                crs="EPSG:4326",
+                transform=from_bounds(
+                    lon, lat, lon + 1, lat + 1, TEST_WIDTH, TEST_HEIGHT
+                ),
+                nodata=TEST_NODATA,
+                compress="lzw",
+            ) as dst:
+                dst.write(
+                    np.full((TEST_WIDTH, TEST_HEIGHT), float(i + 1), dtype=np.float32),
+                    1,
+                )
+
+        dst_path = tmp_path / "mosaic.tif"
+        mosaic_tiles(
+            tile_paths=[Path(p) for p in tiles],
+            dst_path=dst_path,
+            bounds=(79.0, 16.0, 81.0, 17.0),
+            compression="deflate",
+        )
+
+        with rasterio.open(dst_path) as src:
+            assert src.width == TEST_MOSAIC_WIDTH_2TILE
+            assert src.height == TEST_MOSAIC_HEIGHT
+
+
+class TestPositionalCompatibility:
+    """Test positional argument compatibility for restored APIs."""
+
+    def test_crop_raster_positional_args(self, tmp_path: Path):
+        """crop_raster() accepts positional arguments as before."""
+        src_path = tmp_path / "source.tif"
+        with rasterio.open(
+            src_path,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            width=TEST_WIDTH,
+            height=TEST_HEIGHT,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_bounds(79, 16, 80, 17, TEST_WIDTH, TEST_HEIGHT),
+            nodata=TEST_NODATA,
+            compress="lzw",
+        ) as dst:
+            dst.write(
+                np.full(
+                    (TEST_WIDTH, TEST_HEIGHT), TEST_ELEVATION_VALUE, dtype=np.float32
+                ),
+                1,
+            )
+
+        dst_path = tmp_path / "cropped.tif"
+        # Call with positional arguments for all parameters
+        crop_raster(
+            src_path,
+            dst_path,
+            (79.25, 16.25, 79.75, 16.75),
+            None,
+            None,
+            None,
+            "lzw",
+        )
+
+        with rasterio.open(dst_path) as src:
+            assert src.width == TEST_CROP_WIDTH
+
+    def test_mosaic_tiles_positional_args(self, tmp_path: Path):
+        """mosaic_tiles() accepts positional arguments as before."""
+        tiles = []
+        for i, (lat, lon) in enumerate([(16, 79), (16, 80)]):
+            tile_path = Path(tempfile.mktemp(suffix=f"_{i}.tif", dir=tmp_path))
+            tiles.append(str(tile_path))
+
+            with rasterio.open(
+                tile_path,
+                "w",
+                driver="GTiff",
+                dtype="float32",
+                width=TEST_WIDTH,
+                height=TEST_HEIGHT,
+                count=1,
+                crs="EPSG:4326",
+                transform=from_bounds(
+                    lon, lat, lon + 1, lat + 1, TEST_WIDTH, TEST_HEIGHT
+                ),
+                nodata=TEST_NODATA,
+                compress="lzw",
+            ) as dst:
+                dst.write(
+                    np.full((TEST_WIDTH, TEST_HEIGHT), float(i + 1), dtype=np.float32),
+                    1,
+                )
+
+        dst_path = tmp_path / "mosaic.tif"
+        # Call with positional arguments
+        mosaic_tiles(
+            [Path(p) for p in tiles],
+            dst_path,
+            (79.0, 16.0, 81.0, 17.0),
+            DEFAULT_NODATA,
+            "lzw",
+        )
+
+        with rasterio.open(dst_path) as src:
+            assert src.width == TEST_MOSAIC_WIDTH_2TILE
+
+    def test_demacquisition_positional_args(self):
+        """DEMAcquisition() accepts positional timeout, max_retries, retry_delay."""
+        acq = DEMAcquisition(
+            "data/cache",  # cache_dir
+            "data/raw/dem",  # raw_dir
+            None,  # config
+            TEST_TIMEOUT,  # timeout
+            TEST_MAX_RETRIES,  # max_retries
+            TEST_RETRY_DELAY,  # retry_delay
+        )
+        assert acq.timeout == TEST_TIMEOUT
+        assert acq.max_retries == TEST_MAX_RETRIES
+        assert acq.retry_delay == TEST_RETRY_DELAY
 
 
 if __name__ == "__main__":

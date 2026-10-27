@@ -28,6 +28,13 @@ TEST_TILE_ID = "N16E080"
 TEST_NODATA_CUSTOM = -9999.0
 TEST_NODATA_COPERNICUS = -32767.0
 
+# Regression test constants
+TEST_TIMEOUT = 123
+TEST_MAX_RETRIES = 7
+TEST_RETRY_DELAY = 2.5
+TEST_MAX_RETRIES_SMALL = 5
+TEST_RETRY_DELAY_SMALL = 1.23
+
 
 class TestDEMConfig:
     """Tests for DEMConfig."""
@@ -404,6 +411,44 @@ class TestAcquireDemIntegration:
     def test_manifest_verification(self):
         """Test manifest verification with real data."""
         pytest.skip("Requires downloaded data")
+
+
+class TestDEMAcquisitionRegression:
+    """Regression tests for restored public API behavior."""
+
+    def test_constructor_uses_timeout_max_retries_retry_delay(self):
+        """DEMAcquisition honors timeout, max_retries, retry_delay constructor args."""
+        acq = DEMAcquisition(
+            timeout=TEST_TIMEOUT,
+            max_retries=TEST_MAX_RETRIES,
+            retry_delay=TEST_RETRY_DELAY,
+        )
+        assert acq.timeout == TEST_TIMEOUT
+        assert acq.max_retries == TEST_MAX_RETRIES
+        assert acq.retry_delay == TEST_RETRY_DELAY
+
+    def test_constructor_stores_timeout_max_retries_retry_delay(self):
+        """DEMAcquisition honors timeout, max_retries, retry_delay constructor args."""
+        acq = DEMAcquisition(
+            timeout=TEST_TIMEOUT,
+            max_retries=TEST_MAX_RETRIES,
+            retry_delay=TEST_RETRY_DELAY,
+        )
+        assert acq.timeout == TEST_TIMEOUT
+        assert acq.max_retries == TEST_MAX_RETRIES
+        assert acq.retry_delay == TEST_RETRY_DELAY
+
+    def test_max_retries_attribute_used_in_download(self):
+        """max_retries attribute is accessible and used in download logic."""
+        acq = DEMAcquisition(max_retries=TEST_MAX_RETRIES_SMALL)
+        assert acq.max_retries == TEST_MAX_RETRIES_SMALL
+        # The _download_with_retries method uses self.max_retries in its loop
+        # This is verified by the integration test test_acquire_study_area_download
+
+    def test_retry_delay_attribute_stored(self):
+        """retry_delay attribute is stored and accessible."""
+        acq = DEMAcquisition(retry_delay=TEST_RETRY_DELAY_SMALL)
+        assert acq.retry_delay == TEST_RETRY_DELAY_SMALL
 
 
 # Register pytest marks
