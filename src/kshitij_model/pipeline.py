@@ -169,13 +169,13 @@ def _ensure_dem_tiles(
                 logger.info("Tile not cached, will download: %s", tile_id)
                 # Collect missing tiles for batch acquisition
 
-    # If some tiles are missing, acquire only those
+    # If some tiles are missing, acquire only those (or all if use_cached_dem=False)
     if len(tile_paths) != len(tiles):
         missing_tiles = []
         for lat, lon in tiles:
             tile_id = f"N{lat:02d}E{lon:03d}"
             tile_path = Path(config.raw_dir) / f"{tile_id}.tif"
-            if not tile_path.exists():
+            if not config.use_cached_dem or not tile_path.exists():
                 missing_tiles.append((lat, lon))
 
         logger.info("Acquiring %d missing DEM tiles...", len(missing_tiles))

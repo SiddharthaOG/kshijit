@@ -284,13 +284,17 @@ def rasterize_river_mask(
             # Projected CRS: buffer distance is in CRS linear units
             # Convert buffer_meters to CRS units
             # Check if CRS uses meters as units
-            if reference_crs.linear_units_name == "metre" or reference_crs.linear_units_name == "meter":
-                buffer_distance = buffer_meters
+            if reference_crs.is_projected:
+                unit_name = reference_crs.linear_units
+                if unit_name in ("metre", "meter"):
+                    buffer_distance = buffer_meters
+                else:
+                    # For other units, convert using unit conversion factor
+                    unit_factor = getattr(reference_crs, 'linear_units_factor', 1.0)
+                    buffer_distance = buffer_meters / unit_factor if unit_factor > 0 else buffer_meters
             else:
-                # For other units, convert using unit conversion factor
-                # pyproj CRS has linear_units_factor to convert to meters
-                unit_factor = getattr(reference_crs, 'linear_units_factor', 1.0)
-                buffer_distance = buffer_meters / unit_factor if unit_factor > 0 else buffer_meters
+                # Geographic CRS fallback - buffer_meters is already in meters
+                buffer_distance = buffer_meters
 
             buffered_geoms = []
             for feat in features:

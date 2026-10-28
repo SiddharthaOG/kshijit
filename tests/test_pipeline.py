@@ -599,6 +599,71 @@ class TestDEMCacheHandling:
         assert (16, 81) in call_args
         assert (16, 79) not in call_args  # This one was cached
 
+    @patch("kshitij_model.pipeline.acquire_dem")
+    def test_dem_cache_disabled_acquires_all_tiles(self, mock_acquire_dem, tmp_path: Path):
+        """Test that use_cached_dem=False acquires all requested tiles even if they exist.
+        This test verifies that when use_cached_dem=False, all requested tiles are acquired.
+        """
+        # Create dummy DEM tiles for all tiles (simulating cached)
+        tile_dir = tmp_path / "raw"
+        tile_dir.mkdir(parents=True, exist_ok=True)
+        for lat, lon in [(16, 79), (16, 80), (16, 81)]:
+            tile_id = f"N{lat:02d}E{lon:03d}"
+            _create_dummy_dem(
+                tile_dir / f"{tile_id}.tif",
+                100, 100,
+                from_bounds(lon, lat, lon + 1, lat + 1, 100, 100)
+            )
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        # Create river vector
+        river_path = tmp_path / "river.geojson"
+        with river_path.open("w") as f:
+            json.dump({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[79.5, 16.5], [80.5, 16.5]]},
+                    "properties": {"name": "Test River"}
+                }]
+            }, f)
+
+        # Mock acquire_dem to verify it's called with all tiles
+        mock_manifest = MagicMock()
+        mock_manifest.tiles = [
+            MagicMock(local_path=str(tile_dir / "N16E079.tif")),
+            MagicMock(local_path=str(tile_dir / "N16E080.tif")),
+            MagicMock(local_path=str(tile_dir / "N16E081.tif")),
+        ]
+        mock_acquire_dem.return_value = mock_manifest
+
+        config = PipelineConfig(
+            dem_tiles=[(16, 79), (16, 80), (16, 81)],
+            cache_dir=tmp_path / "cache",
+            raw_dir=str(tile_dir),
+            processed_dir=tmp_path / "processed",
+            river_vector_path=tmp_path / "river.geojson",
+            water_level=15.0,
+            output_path=tmp_path / "flood_extent.tif",
+            use_cached_dem=False,
+        )
+
+        from kshitij_model.pipeline import _ensure_dem_tiles, get_config
+        dem_config = get_config()
+        dem_config.study_tiles = [(16, 79), (16, 80), (16, 81)]
+
+        tile_paths = _ensure_dem_tiles(config, dem_config)
+
+        # Verify all three tiles are present
+        assert len(tile_paths) == 3
+        # Verify the order matches the requested tiles
+        for i, (lat, lon) in enumerate([(16, 79), (16, 80), (16, 81)]):
+            tile_id = f"N{lat:02d}E{lon:03d}"
+            assert tile_id in str(tile_paths[i])
+
+        # Verify acquire_dem was called for ALL tiles (not just missing ones)
+        mock_acquire_dem.assert_called_once()
+        call_args = mock_acquire_dem.call_args[1]['tiles']
+        assert len(call_args) == 3
+        assert (16, 79) in call_args
+        assert (16, 80) in call_args
+        assert (16, 81) in call_args
