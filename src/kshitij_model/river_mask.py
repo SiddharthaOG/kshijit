@@ -206,7 +206,8 @@ def rasterize_river_mask(
         reference_height: Height of reference DEM in pixels.
         reference_crs: CRS of reference DEM (default: EPSG:4326).
         buffer_meters: Buffer distance in meters to apply to river geometries.
-                       Requires projected CRS for accurate buffering.
+                       For geographic CRS, this is in meters.
+                       For projected CRS, this is in the CRS linear units.
         all_touched: If True, all pixels touched by geometry are burned.
                      If False, only pixels whose center is within geometry.
 
@@ -216,9 +217,9 @@ def rasterize_river_mask(
 
     Raises:
         RiverVectorError: If vector file cannot be read.
-        RiverGeometryError: If no valid river geometries found.
+        RiverGeometryError: If no valid river geometries found, or invalid buffer distance.
         RiverMaskEmptyError: If rasterized mask contains no True cells.
-        MissingDependencyError: If fiona is not installed.
+        MissingDependencyError: If fiona is not installed, or pyproj/shapely for buffering.
     """
     reference_transform = (
         Affine(*reference_transform)
@@ -226,6 +227,12 @@ def rasterize_river_mask(
         else reference_transform
     )
     reference_crs = CRS.from_user_input(reference_crs)
+
+    # Validate buffer distance
+    if buffer_meters < 0:
+        raise RiverGeometryError("buffer_meters must be non-negative")
+    if not np.isfinite(buffer_meters):
+        raise RiverGeometryError("buffer_meters must be finite")
 
     # Read vector file
     features = _read_vector_file(vector_path)
@@ -236,8 +243,7 @@ def rasterize_river_mask(
     # Transform to reference CRS if needed
     features = _transform_geometries(features, reference_crs)
 
-    # Apply buffer if requested (in target CRS units)
-    # Note: For EPSG:4326, buffer_meters is approximate (degrees)
+    # Apply buffer if requested
     if buffer_meters > 0:
         if not BUFFERING_AVAILABLE:
             raise MissingDependencyError(
@@ -247,9 +253,7 @@ def rasterize_river_mask(
 
         # Create transformer for buffering in meters
         if reference_crs.is_geographic:
-            # Approximate: 1 degree ≈ 111km at equator
-            # At latitude phi, 1 degree longitude ≈ 111km * cos(phi)
-            # We'll use a local azimuthal equidistant projection centered on the data
+            # Geographic CRS: buffer_meters is in meters, use local azimuthal equidistant projection
             bounds = rasterio.transform.array_bounds(
                 reference_height, reference_width, reference_transform
             )
@@ -270,10 +274,29 @@ def rasterize_river_mask(
                 geom = shape(feat["geometry"])
                 # Transform to projected CRS, buffer, transform back
                 geom_proj = shapely_transform(transformer.transform, geom)
-                geom_proj.buffer(buffer_meters)
-                geom_back = shapely_transform(inverse_transformer.transform, geom_proj)
+                geom_buffered = geom_proj.buffer(buffer_meters)
+                geom_back = shapely_transform(inverse_transformer.transform, geom_buffered)
                 buffered_geoms.append(geom_back.__geo_interface__)
             # Replace geometries with buffered versions
+            for i, feat in enumerate(features):
+                feat["geometry"] = buffered_geoms[i]
+        else:
+            # Projected CRS: buffer distance is in CRS linear units
+            # Convert buffer_meters to CRS units
+            # Check if CRS uses meters as units
+            if reference_crs.linear_units_name == "metre" or reference_crs.linear_units_name == "meter":
+                buffer_distance = buffer_meters
+            else:
+                # For other units, convert using unit conversion factor
+                # pyproj CRS has linear_units_factor to convert to meters
+                unit_factor = getattr(reference_crs, 'linear_units_factor', 1.0)
+                buffer_distance = buffer_meters / unit_factor if unit_factor > 0 else buffer_meters
+
+            buffered_geoms = []
+            for feat in features:
+                geom = shape(feat["geometry"])
+                geom_buffered = geom.buffer(buffer_distance)
+                buffered_geoms.append(geom_buffered.__geo_interface__)
             for i, feat in enumerate(features):
                 feat["geometry"] = buffered_geoms[i]
 

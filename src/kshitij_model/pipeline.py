@@ -92,10 +92,31 @@ class PipelineConfig:
             raise PipelineConfigError("water_level must be finite")
         if self.river_vector_path is None:
             raise PipelineConfigError("river_vector_path is required")
-        if self.aoi_bounds is not None and len(self.aoi_bounds) != 4:
-            raise PipelineConfigError(
-                "aoi_bounds must be (min_lon, min_lat, max_lon, max_lat)"
-            )
+        if self.aoi_bounds is not None:
+            if len(self.aoi_bounds) != 4:
+                raise PipelineConfigError(
+                    "aoi_bounds must be (min_lon, min_lat, max_lon, max_lat)"
+                )
+            min_lon, min_lat, max_lon, max_lat = self.aoi_bounds
+            # Check for finite coordinates
+            if not all(np.isfinite(c) for c in self.aoi_bounds):
+                raise PipelineConfigError("aoi_bounds coordinates must be finite")
+            # Check min/max ordering
+            if min_lon >= max_lon:
+                raise PipelineConfigError("aoi_bounds min_lon must be less than max_lon")
+            if min_lat >= max_lat:
+                raise PipelineConfigError("aoi_bounds min_lat must be less than max_lat")
+            # Check geographic bounds for WGS84
+            if min_lon < -180 or max_lon > 180:
+                raise PipelineConfigError("aoi_bounds longitude must be in [-180, 180]")
+            if min_lat < -90 or max_lat > 90:
+                raise PipelineConfigError("aoi_bounds latitude must be in [-90, 90]")
+
+        # Validate buffer distance
+        if self.river_buffer_meters < 0:
+            raise PipelineConfigError("river_buffer_meters must be non-negative")
+        if not np.isfinite(self.river_buffer_meters):
+            raise PipelineConfigError("river_buffer_meters must be finite")
 
 
 @dataclass
@@ -117,20 +138,23 @@ def _ensure_dem_tiles(
     config: PipelineConfig,
     dem_config: DEMConfig,
 ) -> list[Path]:
-    """Ensure DEM tiles are available locally, downloading if necessary.
+    """Ensure DEM tiles are available locally, downloading only missing tiles if necessary.
 
     Args:
         config: Pipeline configuration.
         dem_config: DEM configuration.
 
     Returns:
-        List of paths to DEM tile files.
+        List of paths to DEM tile files in the same order as requested tiles.
+
+    Raises:
+        PipelineError: If a requested tile is still missing after acquisition.
     """
     tiles = config.dem_tiles or dem_config.study_tiles
     tile_paths = []
 
     if config.use_cached_dem:
-        DEMAcquisition(
+        acquisition = DEMAcquisition(
             cache_dir=config.cache_dir,
             raw_dir=config.raw_dir,
             config=dem_config,
@@ -143,20 +167,44 @@ def _ensure_dem_tiles(
                 tile_paths.append(tile_path)
             else:
                 logger.info("Tile not cached, will download: %s", tile_id)
-                # Fall through to acquisition
+                # Collect missing tiles for batch acquisition
 
+    # If some tiles are missing, acquire only those
     if len(tile_paths) != len(tiles):
-        # Need to acquire missing tiles
-        logger.info("Acquiring DEM tiles...")
+        missing_tiles = []
+        for lat, lon in tiles:
+            tile_id = f"N{lat:02d}E{lon:03d}"
+            tile_path = Path(config.raw_dir) / f"{tile_id}.tif"
+            if not tile_path.exists():
+                missing_tiles.append((lat, lon))
+
+        logger.info("Acquiring %d missing DEM tiles...", len(missing_tiles))
         manifest = acquire_dem(
-            tiles=tiles,
+            tiles=missing_tiles,
             cache_dir=config.cache_dir,
             raw_dir=config.raw_dir,
         )
         for tile_info in manifest.tiles:
             tile_paths.append(Path(tile_info.local_path))
 
-    return tile_paths
+    # Verify all tiles are present
+    if len(tile_paths) != len(tiles):
+        missing = []
+        for lat, lon in tiles:
+            tile_id = f"N{lat:02d}E{lon:03d}"
+            tile_path = Path(config.raw_dir) / f"{tile_id}.tif"
+            if not tile_path.exists():
+                missing.append(tile_id)
+        raise PipelineError(f"DEM tiles still missing after acquisition: {missing}")
+
+    # Ensure paths are in the same order as requested tiles
+    ordered_paths = []
+    for lat, lon in tiles:
+        tile_id = f"N{lat:02d}E{lon:03d}"
+        tile_path = Path(config.raw_dir) / f"{tile_id}.tif"
+        ordered_paths.append(tile_path)
+
+    return ordered_paths
 
 
 def _mosaic_and_crop_dem(

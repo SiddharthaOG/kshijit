@@ -62,6 +62,72 @@ class TestPipelineConfig:
                 aoi_bounds=(1.0, 2.0, 3.0),  # Only 3 values
             )
 
+    def test_invalid_aoi_bounds_min_max_ordering(self):
+        """AOI bounds with min >= max should raise."""
+        with pytest.raises(PipelineConfigError, match="min_lon must be less than max_lon"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                aoi_bounds=(10.0, 2.0, 5.0, 3.0),  # min_lon > max_lon
+            )
+        with pytest.raises(PipelineConfigError, match="min_lat must be less than max_lat"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                aoi_bounds=(5.0, 10.0, 10.0, 5.0),  # min_lat > max_lat
+            )
+
+    def test_invalid_aoi_bounds_out_of_range(self):
+        """AOI bounds outside geographic bounds should raise."""
+        with pytest.raises(PipelineConfigError, match="longitude must be in"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                aoi_bounds=(-200.0, 10.0, 10.0, 20.0),  # min_lon < -180
+            )
+        with pytest.raises(PipelineConfigError, match="latitude must be in"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                aoi_bounds=(10.0, -100.0, 20.0, 20.0),  # min_lat < -90
+            )
+
+    def test_invalid_aoi_bounds_non_finite(self):
+        """Non-finite AOI bounds should raise."""
+        with pytest.raises(PipelineConfigError, match="finite"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                aoi_bounds=(float("nan"), 10.0, 20.0, 30.0),
+            )
+
+    def test_negative_buffer_raises(self):
+        """Negative buffer distance should raise."""
+        with pytest.raises(PipelineConfigError, match="river_buffer_meters must be non-negative"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                river_buffer_meters=-10.0,
+            )
+
+    def test_nan_buffer_raises(self):
+        """NaN buffer distance should raise."""
+        with pytest.raises(PipelineConfigError, match="finite"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                river_buffer_meters=float("nan"),
+            )
+
+    def test_inf_buffer_raises(self):
+        """Infinite buffer distance should raise."""
+        with pytest.raises(PipelineConfigError, match="finite"):
+            PipelineConfig(
+                river_vector_path="river.geojson",
+                water_level=15.0,
+                river_buffer_meters=float("inf"),
+            )
+
 
 def _create_dummy_dem(
     path: Path, width: int, height: int, transform, crs: str = "EPSG:4326"
@@ -458,6 +524,80 @@ class TestPipelineWithRealDEM:
         assert result.flooded_cell_count >= 0
         assert result.valid_cell_count > 0
         assert result.elevation_shape is not None
+
+
+class TestDEMCacheHandling:
+    """Tests for DEM cache handling in the pipeline."""
+
+    @patch("kshitij_model.pipeline.acquire_dem")
+    def test_dem_cache_handling_mixed_cached_and_missing(self, mock_acquire_dem, tmp_path: Path):
+        """Test that DEM cache handling works correctly with a mix of cached and missing tiles.
+        This test verifies that only missing tiles are downloaded, not all tiles.
+        """
+        # Create a dummy DEM tile for the first tile (simulating cached)
+        tile_dir = tmp_path / "raw"
+        tile_dir.mkdir(parents=True, exist_ok=True)
+        for lat, lon in [(16, 79)]:
+            tile_id = f"N{lat:02d}E{lon:03d}"
+            _create_dummy_dem(
+                tile_dir / f"{tile_id}.tif",
+                100, 100,
+                from_bounds(lon, lat, lon + 1, lat + 1, 100, 100)
+            )
+
+        # Create river vector
+        river_path = tmp_path / "river.geojson"
+        with river_path.open("w") as f:
+            json.dump({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[79.5, 16.5], [80.5, 16.5]]},
+                    "properties": {"name": "Test River"}
+                }]
+            }, f)
+
+        # Mock acquire_dem to verify it's only called for missing tiles
+        mock_manifest = MagicMock()
+        mock_manifest.tiles = [
+            MagicMock(local_path=str(tile_dir / "N16E080.tif")),
+            MagicMock(local_path=str(tile_dir / "N16E081.tif")),
+        ]
+        mock_acquire_dem.return_value = mock_manifest
+
+        config = PipelineConfig(
+            dem_tiles=[(16, 79), (16, 80), (16, 81)],
+            cache_dir=tmp_path / "cache",
+            raw_dir=str(tile_dir),
+            processed_dir=tmp_path / "processed",
+            river_vector_path=tmp_path / "river.geojson",
+            water_level=15.0,
+            output_path=tmp_path / "flood_extent.tif",
+            use_cached_dem=True,
+        )
+
+        # We don't run the full pipeline since we're mocking acquire_dem
+        # Just test the _ensure_dem_tiles function
+        from kshitij_model.pipeline import _ensure_dem_tiles, get_config
+        dem_config = get_config()
+        dem_config.study_tiles = [(16, 79), (16, 80), (16, 81)]
+
+        tile_paths = _ensure_dem_tiles(config, dem_config)
+
+        # Verify all three tiles are present
+        assert len(tile_paths) == 3
+        # Verify the order matches the requested tiles
+        for i, (lat, lon) in enumerate([(16, 79), (16, 80), (16, 81)]):
+            tile_id = f"N{lat:02d}E{lon:03d}"
+            assert tile_id in str(tile_paths[i])
+
+        # Verify acquire_dem was called only for missing tiles (2 tiles: 16,80 and 16,81)
+        mock_acquire_dem.assert_called_once()
+        call_args = mock_acquire_dem.call_args[1]['tiles']
+        assert len(call_args) == 2
+        assert (16, 80) in call_args
+        assert (16, 81) in call_args
+        assert (16, 79) not in call_args  # This one was cached
 
 
 if __name__ == "__main__":

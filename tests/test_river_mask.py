@@ -433,7 +433,95 @@ class TestRiverBuffering:
         """Test that buffering raises MissingDependencyError when dependencies unavailable."""
         # This test is a placeholder - in the actual environment, dependencies are available
         # The actual error is raised when BUFFERING_AVAILABLE is False
+        pass
 
+    def test_negative_buffer_raises(self, tmp_path: Path):
+        """Test that negative buffer distance raises RiverGeometryError."""
+        geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[1.0, 5.0], [9.0, 5.0]],
+                    },
+                    "properties": {},
+                }
+            ],
+        }
+        geojson_path = tmp_path / "river.geojson"
+        with geojson_path.open("w") as f:
+            json.dump(geojson, f)
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        transform = from_bounds(0, 0, 10, 10, 100, 100)
+
+        with pytest.raises(RiverGeometryError, match="buffer_meters must be non-negative"):
+            rasterize_river_mask(
+                vector_path=tmp_path / "river.geojson",
+                reference_transform=(0.1, 0.0, 0.0, 0.0, -0.1, 10.0),
+                reference_width=100,
+                reference_height=100,
+                reference_crs="EPSG:4326",
+                buffer_meters=-10.0,
+            )
+
+    def test_nan_buffer_raises(self, tmp_path: Path):
+        """Test that NaN buffer distance raises RiverGeometryError."""
+        geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[1.0, 5.0], [9.0, 5.0]],
+                    },
+                    "properties": {},
+                }
+            ],
+        }
+        geojson_path = tmp_path / "river.geojson"
+        with geojson_path.open("w") as f:
+            json.dump(geojson, f)
+
+        transform = from_bounds(0, 0, 10, 10, 100, 100)
+
+        with pytest.raises(RiverGeometryError, match="buffer_meters must be finite"):
+            rasterize_river_mask(
+                vector_path=tmp_path / "river.geojson",
+                reference_transform=(0.1, 0.0, 0.0, 0.0, -0.1, 10.0),
+                reference_width=100,
+                reference_height=100,
+                reference_crs="EPSG:4326",
+                buffer_meters=float("nan"),
+            )
+
+    def test_inf_buffer_raises(self, tmp_path: Path):
+        """Test that infinite buffer distance raises RiverGeometryError."""
+        geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[1.0, 5.0], [9.0, 5.0]],
+                    },
+                    "properties": {},
+                }
+            ],
+        }
+        geojson_path = tmp_path / "river.geojson"
+        with geojson_path.open("w") as f:
+            json.dump(geojson, f)
+
+        with pytest.raises(RiverGeometryError, match="buffer_meters must be finite"):
+            rasterize_river_mask(
+                vector_path=tmp_path / "river.geojson",
+                reference_transform=(0.1, 0.0, 0.0, 0.0, -0.1, 10.0),
+                reference_width=100,
+                reference_height=100,
+                reference_crs="EPSG:4326",
+                buffer_meters=float("inf"),
+            )
