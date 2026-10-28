@@ -14,7 +14,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "fiona>=1.9", "shapely>=2.0", "pyproj>=3.6"]
+river = ["fiona>=1.9", "shapely>=2.0", "pyproj>=3.6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

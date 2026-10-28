@@ -1,16 +1,14 @@
 """Raster preprocessing module for Kshitij flood-connectivity model.
 
 Provides functionality to inspect, crop, mosaic, and prepare Copernicus DEM GLO-30
-tiles for the flood-connectivity model.
+tiles for the flood-connectivity model, and to write flood extent outputs.
 """
 
 from __future__ import annotations
 
-import json
-import warnings
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import rasterio
@@ -18,9 +16,6 @@ from rasterio.enums import Resampling
 from rasterio.merge import merge
 from rasterio.transform import from_bounds
 from rasterio.windows import from_bounds
-
-from .config import DEMConfig
-from .connectivity import compute_flood_extent
 
 
 @dataclass
@@ -53,8 +48,6 @@ class RasterMetadata:
 
 class RasterPreprocessingError(Exception):
     """Raised when raster preprocessing fails."""
-
-    pass
 
 
 def inspect_raster(path: Path | str) -> dict[str, Any]:
@@ -103,7 +96,9 @@ def inspect_raster(path: Path | str) -> dict[str, Any]:
         return meta
 
 
-def _bounds_to_window(src: rasterio.DatasetReader, bounds: tuple[float, float, float, float]) -> rasterio.windows.Window:
+def _bounds_to_window(
+    src: rasterio.DatasetReader, bounds: tuple[float, float, float, float]
+) -> rasterio.windows.Window:
     """Convert geographic bounds to a rasterio window.
 
     Args:
@@ -167,13 +162,15 @@ def crop_raster(
 
         # Update profile for output
         profile = src.profile.copy()
-        profile.update({
-            "height": data.shape[0],
-            "width": data.shape[1],
-            "transform": new_transform,
-            "compress": "lzw",
-            "driver": "GTiff",
-        })
+        profile.update(
+            {
+                "height": data.shape[0],
+                "width": data.shape[1],
+                "transform": new_transform,
+                "compress": "lzw",
+                "driver": "GTiff",
+            }
+        )
 
         # Set nodata value
         if dst_nodata is not None:
@@ -291,14 +288,16 @@ def mosaic_tiles(
 
         # Update profile for output
         profile = src.profile.copy()
-        profile.update({
-            "height": mosaic_data.shape[1],
-            "width": mosaic_data.shape[2],
-            "transform": mosaic_transform,
-            "compress": "lzw",
-            "driver": "GTiff",
-            "nodata": -32767,
-        })
+        profile.update(
+            {
+                "height": mosaic_data.shape[1],
+                "width": mosaic_data.shape[2],
+                "transform": mosaic_transform,
+                "compress": "lzw",
+                "driver": "GTiff",
+                "nodata": -32767,
+            }
+        )
 
         # Write output
         output_path = Path(dst_path)
@@ -349,11 +348,13 @@ def write_geotiff(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     profile = profile.copy()
-    profile.update({
-        "compress": "lzw",
-        "driver": "GTiff",
-        "nodata": nodata if nodata is not None else -32767,
-    })
+    profile.update(
+        {
+            "compress": "lzw",
+            "driver": "GTiff",
+            "nodata": nodata if nodata is not None else -32767,
+        }
+    )
 
     # Replace NaN with nodata value for output
     output_data = data.copy()
@@ -417,3 +418,84 @@ def prepare_model_input(
         }
 
         return data, validity_mask, metadata
+
+
+def write_flood_extent(
+    dst_path: Path | str,
+    flooded: np.ndarray,
+    validity_mask: np.ndarray,
+    dem_metadata: dict[str, Any],
+    nodata: int = 255,
+    compression: str = "lzw",
+) -> dict[str, Any]:
+    """Write flood extent as a GeoTIFF with three-state encoding.
+
+    Output encoding (uint8):
+    - 1: flooded valid cell
+    - 0: valid, non-flooded (dry) cell
+    - nodata (default 255): invalid terrain or outside modeled domain
+
+    Args:
+        dst_path: Output path for flood extent GeoTIFF.
+        flooded: Boolean array from compute_flood_extent (True = flooded).
+        validity_mask: Boolean array from prepare_model_input (True = valid terrain).
+        dem_metadata: Metadata dict from prepare_model_input containing
+            crs, transform, bounds, width, height.
+        nodata: NoData value for output (default 255 for uint8).
+        compression: Compression method (default: lzw).
+
+    Returns:
+        Dictionary with output metadata.
+
+    Raises:
+        ValueError: If flooded and validity_mask shapes don't match dem_metadata.
+    """
+    # Validate shapes
+    expected_height = dem_metadata["height"]
+    expected_width = dem_metadata["width"]
+    if flooded.shape != (expected_height, expected_width):
+        raise ValueError(
+            f"flooded shape {flooded.shape} does not match dem_metadata "
+            f"({expected_height}, {expected_width})"
+        )
+    if validity_mask.shape != (expected_height, expected_width):
+        raise ValueError(
+            f"validity_mask shape {validity_mask.shape} does not match dem_metadata "
+            f"({expected_height}, {expected_width})"
+        )
+
+    # Create output array with three states
+    output_data = np.full(flooded.shape, nodata, dtype=np.uint8)
+    output_data[validity_mask & ~flooded] = 0  # valid dry
+    output_data[validity_mask & flooded] = 1  # valid flooded
+    # validity_mask == False remains nodata (invalid terrain)
+
+    output_path = Path(dst_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    profile = {
+        "driver": "GTiff",
+        "dtype": "uint8",
+        "width": expected_width,
+        "height": expected_height,
+        "count": 1,
+        "crs": dem_metadata["crs"],
+        "transform": dem_metadata["transform"],
+        "compress": compression,
+        "nodata": nodata,
+    }
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(output_data, 1)
+
+    # Verify by reopening
+    with rasterio.open(output_path) as src:
+        return {
+            "crs": str(src.crs) if src.crs else None,
+            "width": src.width,
+            "height": src.height,
+            "transform": list(src.transform),
+            "bounds": list(src.bounds),
+            "dtype": str(src.dtypes[0]) if src.dtypes else None,
+            "nodata": src.nodata,
+        }
