@@ -109,11 +109,11 @@ class TestMetrics:
         # IoU = 2 / (2+1+1) = 0.5
         assert metrics.iou == 0.5
         # Precision = 2 / (2+1) = 2/3
-        assert abs(metrics.precision - 2/3) < 1e-10
+        assert abs(metrics.precision - 2 / 3) < 1e-10
         # Recall = 2 / (2+1) = 2/3
-        assert abs(metrics.recall - 2/3) < 1e-10
+        assert abs(metrics.recall - 2 / 3) < 1e-10
         # F1 = 2 * (2/3) * (2/3) / (4/3) = 2/3
-        assert abs(metrics.f1 - 2/3) < 1e-10
+        assert abs(metrics.f1 - 2 / 3) < 1e-10
         # Area ratio = (2+1) / (2+1) = 1.0
         assert metrics.area_ratio == 1.0
 
@@ -228,8 +228,15 @@ class TestValidationMetricsDataclass:
     def test_to_dict(self):
         """to_dict should return all metrics."""
         metrics = ValidationMetrics(
-            tp=10, fp=5, fn=3, tn=100,
-            iou=0.5, precision=0.667, recall=0.769, f1=0.714, area_ratio=1.2,
+            tp=10,
+            fp=5,
+            fn=3,
+            tn=100,
+            iou=0.5,
+            precision=0.667,
+            recall=0.769,
+            f1=0.714,
+            area_ratio=1.2,
             valid_pixels=118,
         )
         d = metrics.to_dict()

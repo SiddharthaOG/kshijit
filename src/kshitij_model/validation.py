@@ -9,14 +9,19 @@ Provides reusable functions for:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import rasterio
+import requests
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
+
+# Constants
+MIN_COORDS_FOR_LINESTRING = 2
 
 
 @dataclass
@@ -91,8 +96,6 @@ def compute_metrics(tp: int, fp: int, fn: int, tn: int) -> ValidationMetrics:
     Returns:
         ValidationMetrics object with all computed metrics.
     """
-    valid_pixels = tp + fp + fn + tn
-
     # IoU (Jaccard index)
     iou_denom = tp + fp + fn
     iou = tp / iou_denom if iou_denom > 0 else 0.0
@@ -101,7 +104,6 @@ def compute_metrics(tp: int, fp: int, fn: int, tn: int) -> ValidationMetrics:
     prec_denom = tp + fp
     precision = tp / prec_denom if prec_denom > 0 else 0.0
 
-    # Recall (Sensitivity)
     recall_denom = tp + fn
     recall = tp / recall_denom if recall_denom > 0 else 0.0
 
@@ -148,7 +150,7 @@ def compute_metrics_from_arrays(
     return compute_metrics(tp, fp, fn, tn)
 
 
-def align_rasters_to_common_grid(
+def align_rasters_to_common_grid(  # noqa: PLR0913, PLR0917
     src_path: str | Path,
     dst_path: str | Path,
     reference_transform: rasterio.Affine,
@@ -175,14 +177,16 @@ def align_rasters_to_common_grid(
     """
     with rasterio.open(src_path) as src:
         profile = src.profile.copy()
-        profile.update({
-            "crs": reference_crs,
-            "transform": reference_transform,
-            "width": reference_width,
-            "height": reference_height,
-            "driver": "GTiff",
-            "compress": "lzw",
-        })
+        profile.update(
+            {
+                "crs": reference_crs,
+                "transform": reference_transform,
+                "width": reference_width,
+                "height": reference_height,
+                "driver": "GTiff",
+                "compress": "lzw",
+            }
+        )
         if nodata is not None:
             profile["nodata"] = nodata
 
@@ -330,7 +334,6 @@ def extract_krishna_river_from_osm(
     Returns:
         Path to output GeoJSON file.
     """
-    import requests
 
     min_lon, min_lat, max_lon, max_lat = bbox
     # Expand bbox by buffer
@@ -363,15 +366,17 @@ def extract_krishna_river_from_osm(
     for element in data.get("elements", []):
         if element["type"] == "way" and "geometry" in element:
             coords = [[node["lon"], node["lat"]] for node in element["geometry"]]
-            if len(coords) >= 2:
-                features.append({
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": coords,
-                    },
-                    "properties": element.get("tags", {}),
-                })
+            if len(coords) >= MIN_COORDS_FOR_LINESTRING:
+                features.append(
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": coords,
+                        },
+                        "properties": element.get("tags", {}),
+                    }
+                )
 
     geojson = {
         "type": "FeatureCollection",
@@ -384,19 +389,3 @@ def extract_krishna_river_from_osm(
         json.dump(geojson, f)
 
     return Path(output_path)
-
-
-if __name__ == "__main__":
-    # Quick self-test
-    model = np.array([[True, True, False], [False, True, False]])
-    ref = np.array([[True, False, False], [False, True, True]])
-    valid = np.array([[True, True, True], [True, True, True]])
-
-    metrics = compute_metrics_from_arrays(model, ref, valid)
-    print(f"TP: {metrics.tp}, FP: {metrics.fp}, FN: {metrics.fn}, TN: {metrics.tn}")
-    print(f"IoU: {metrics.iou:.4f}, Precision: {metrics.precision:.4f}, Recall: {metrics.recall:.4f}, F1: {metrics.f1:.4f}")
-
-    # Test RGB composite
-    rgb = create_comparison_rgb(model, ref, valid_mask=np.ones_like(model))
-    print(f"RGB shape: {rgb.shape}")
-    print("Self-test passed!")
