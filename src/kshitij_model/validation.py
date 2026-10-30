@@ -16,7 +16,6 @@ from typing import Any
 
 import numpy as np
 import rasterio
-import requests
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
 
@@ -333,7 +332,11 @@ def extract_krishna_river_from_osm(
 
     Returns:
         Path to output GeoJSON file.
+
+    Raises:
+        ImportError: If the optional dependency `requests` is not installed.
     """
+    import requests  # noqa: PLC0415
 
     min_lon, min_lat, max_lon, max_lat = bbox
     # Expand bbox by buffer
