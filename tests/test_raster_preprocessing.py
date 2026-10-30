@@ -10,17 +10,14 @@ import pytest
 import rasterio
 from rasterio.transform import from_bounds
 
-from kshitij_model.config import DEMConfig, get_config
 from kshitij_model.dem_acquisition import DEMAcquisition
 from kshitij_model.raster_preprocessing import (
     DEFAULT_NODATA,
-    RasterPreprocessingError,
     build_validity_mask,
     crop_raster,
     inspect_raster,
     mosaic_tiles,
     prepare_model_input,
-    write_flood_extent,
     write_geotiff,
 )
 

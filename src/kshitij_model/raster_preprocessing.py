@@ -14,13 +14,23 @@ import numpy as np
 import rasterio
 from rasterio.enums import Resampling
 from rasterio.merge import merge
-from rasterio.transform import from_bounds
 from rasterio.windows import from_bounds as windows_from_bounds
 
 # Constants
 DEFAULT_NODATA = -32767
 SINGLE_BAND = 1
 EXPECTED_NDIM = 3
+
+# Error messages
+ERROR_FLOODED_SHAPE_MISMATCH = (
+    "flooded shape {shape} does not match dem_metadata "
+    "({expected_height}, {expected_width})"
+)
+ERROR_VALIDITY_MASK_SHAPE_MISMATCH = (
+    "validity_mask shape {shape} does not match dem_metadata "
+    "({expected_height}, {expected_width})"
+)
+
 
 @dataclass
 class RasterMetadata:
@@ -420,7 +430,7 @@ def prepare_model_input(
         return data, validity_mask, metadata
 
 
-def write_flood_extent(
+def write_flood_extent(  # noqa: PLR0913, PLR0917
     dst_path: Path | str,
     flooded: np.ndarray,
     validity_mask: np.ndarray,
@@ -455,13 +465,19 @@ def write_flood_extent(
     expected_width = dem_metadata["width"]
     if flooded.shape != (expected_height, expected_width):
         raise ValueError(
-            f"flooded shape {flooded.shape} does not match dem_metadata "
-            f"({expected_height}, {expected_width})"
+            ERROR_FLOODED_SHAPE_MISMATCH.format(
+                shape=flooded.shape,
+                expected_height=expected_height,
+                expected_width=expected_width,
+            )
         )
     if validity_mask.shape != (expected_height, expected_width):
         raise ValueError(
-            f"validity_mask shape {validity_mask.shape} does not match dem_metadata "
-            f"({expected_height}, {expected_width})"
+            ERROR_VALIDITY_MASK_SHAPE_MISMATCH.format(
+                shape=validity_mask.shape,
+                expected_height=expected_height,
+                expected_width=expected_width,
+            )
         )
 
     # Create output array with three states

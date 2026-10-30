@@ -15,10 +15,22 @@ from kshitij_model.pipeline import (
     PipelineConfig,
     PipelineConfigError,
     PipelineError,
+    _ensure_dem_tiles,
+    get_config,
     run_pipeline,
 )
 from kshitij_model.raster_preprocessing import write_flood_extent
 from kshitij_model.river_mask import RiverMaskEmptyError
+
+# Test constants
+TEST_WATER_LEVEL = 15.0
+TEST_WIDTH = 100
+TEST_HEIGHT = 100
+TEST_NODATA = 255
+TEST_FLOODED_CELLS = 20000
+TEST_VALID_CELLS = 20000
+TEST_TILE_COUNT = 3
+TEST_TILE_COUNT_TWO = 2
 
 
 class TestPipelineConfig:
@@ -28,9 +40,9 @@ class TestPipelineConfig:
         """Test valid configuration."""
         config = PipelineConfig(
             river_vector_path="data/river.geojson",
-            water_level=15.0,
+            water_level=TEST_WATER_LEVEL,
         )
-        assert config.water_level == 15.0
+        assert config.water_level == TEST_WATER_LEVEL
         assert config.river_vector_path == "data/river.geojson"
 
     def test_invalid_water_level_none(self):
@@ -64,13 +76,17 @@ class TestPipelineConfig:
 
     def test_invalid_aoi_bounds_min_max_ordering(self):
         """AOI bounds with min >= max should raise."""
-        with pytest.raises(PipelineConfigError, match="min_lon must be less than max_lon"):
+        with pytest.raises(
+            PipelineConfigError, match="min_lon must be less than max_lon"
+        ):
             PipelineConfig(
                 river_vector_path="river.geojson",
                 water_level=15.0,
                 aoi_bounds=(10.0, 2.0, 5.0, 3.0),  # min_lon > max_lon
             )
-        with pytest.raises(PipelineConfigError, match="min_lat must be less than max_lat"):
+        with pytest.raises(
+            PipelineConfigError, match="min_lat must be less than max_lat"
+        ):
             PipelineConfig(
                 river_vector_path="river.geojson",
                 water_level=15.0,
@@ -103,7 +119,9 @@ class TestPipelineConfig:
 
     def test_negative_buffer_raises(self):
         """Negative buffer distance should raise."""
-        with pytest.raises(PipelineConfigError, match="river_buffer_meters must be non-negative"):
+        with pytest.raises(
+            PipelineConfigError, match="river_buffer_meters must be non-negative"
+        ):
             PipelineConfig(
                 river_vector_path="river.geojson",
                 water_level=15.0,
@@ -176,15 +194,15 @@ class TestWriteFloodExtent:
             flooded=flooded,
             validity_mask=validity_mask,
             dem_metadata=dem_metadata,
-            nodata=255,
+            nodata=TEST_NODATA,
         )
 
         assert output_path.exists()
         assert meta["crs"] == "EPSG:4326"
-        assert meta["width"] == 100
-        assert meta["height"] == 100
+        assert meta["width"] == TEST_WIDTH
+        assert meta["height"] == TEST_HEIGHT
         assert meta["dtype"] == "uint8"
-        assert meta["nodata"] == 255
+        assert meta["nodata"] == TEST_NODATA
 
         # Verify content by reopening
         with rasterio.open(output_path) as src:
@@ -197,7 +215,7 @@ class TestWriteFloodExtent:
             assert data[55, 30] == 0
 
             # Invalid cells = 255 (NoData)
-            assert data[5, 5] == 255
+            assert data[5, 5] == TEST_NODATA
 
     def test_write_flood_extent_shape_mismatch_raises(self, tmp_path: Path):
         """Shape mismatch should raise ValueError."""
@@ -210,7 +228,7 @@ class TestWriteFloodExtent:
             "height": 100,
         }
 
-        with pytest.raises(ValueError, match="shape.*does not match"):
+        with pytest.raises(ValueError, match=r"shape.*does not match"):
             write_flood_extent(
                 dst_path=tmp_path / "out.tif",
                 flooded=flooded,
@@ -289,7 +307,7 @@ class TestPipelineIntegration:
     @patch("kshitij_model.pipeline.rasterize_river_mask")
     @patch("kshitij_model.pipeline.write_flood_extent")
     @patch("kshitij_model.pipeline.write_river_mask_geotiff")
-    def test_pipeline_orchestration(
+    def test_pipeline_orchestration(  # noqa: PLR0913, PLR0917
         self,
         mock_write_river_mask,
         mock_write_flood_extent,
@@ -321,13 +339,13 @@ class TestPipelineIntegration:
 
         # Mock crop_raster to create actual file
         def mock_crop_func(
-            src_path,
+            _src_path,
             dst_path,
-            bounds,
-            nodata=None,
-            dst_crs=None,
-            dst_nodata=None,
-            compression="lzw",
+            _bounds,
+            _nodata=None,
+            _dst_crs=None,
+            _dst_nodata=None,
+            _compression="lzw",
         ):
             transform = from_bounds(80, 16, 82, 17, 200, 100)
             _create_dummy_dem(Path(dst_path), 200, 100, transform)
@@ -400,8 +418,8 @@ class TestPipelineIntegration:
         # Verify result
         assert result.flood_extent_path == Path(config.output_path)
         # With all cells valid and elevation <= water_level, all valid cells flood
-        assert result.flooded_cell_count == 20000
-        assert result.valid_cell_count == 20000
+        assert result.flooded_cell_count == TEST_FLOODED_CELLS
+        assert result.valid_cell_count == TEST_VALID_CELLS
         assert result.elevation_shape == (100, 200)
 
         # Verify mocks called
@@ -530,7 +548,9 @@ class TestDEMCacheHandling:
     """Tests for DEM cache handling in the pipeline."""
 
     @patch("kshitij_model.pipeline.acquire_dem")
-    def test_dem_cache_handling_mixed_cached_and_missing(self, mock_acquire_dem, tmp_path: Path):
+    def test_dem_cache_handling_mixed_cached_and_missing(
+        self, mock_acquire_dem, tmp_path: Path
+    ):
         """Test that DEM cache handling works correctly with a mix of cached and missing tiles.
         This test verifies that only missing tiles are downloaded, not all tiles.
         """
@@ -541,21 +561,30 @@ class TestDEMCacheHandling:
             tile_id = f"N{lat:02d}E{lon:03d}"
             _create_dummy_dem(
                 tile_dir / f"{tile_id}.tif",
-                100, 100,
-                from_bounds(lon, lat, lon + 1, lat + 1, 100, 100)
+                100,
+                100,
+                from_bounds(lon, lat, lon + 1, lat + 1, 100, 100),
             )
 
         # Create river vector
         river_path = tmp_path / "river.geojson"
         with river_path.open("w") as f:
-            json.dump({
-                "type": "FeatureCollection",
-                "features": [{
-                    "type": "Feature",
-                    "geometry": {"type": "LineString", "coordinates": [[79.5, 16.5], [80.5, 16.5]]},
-                    "properties": {"name": "Test River"}
-                }]
-            }, f)
+            json.dump(
+                {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "LineString",
+                                "coordinates": [[79.5, 16.5], [80.5, 16.5]],
+                            },
+                            "properties": {"name": "Test River"},
+                        }
+                    ],
+                },
+                f,
+            )
 
         # Mock acquire_dem to verify it's only called for missing tiles
         mock_manifest = MagicMock()
@@ -578,14 +607,13 @@ class TestDEMCacheHandling:
 
         # We don't run the full pipeline since we're mocking acquire_dem
         # Just test the _ensure_dem_tiles function
-        from kshitij_model.pipeline import _ensure_dem_tiles, get_config
         dem_config = get_config()
         dem_config.study_tiles = [(16, 79), (16, 80), (16, 81)]
 
         tile_paths = _ensure_dem_tiles(config, dem_config)
 
         # Verify all three tiles are present
-        assert len(tile_paths) == 3
+        assert len(tile_paths) == TEST_TILE_COUNT
         # Verify the order matches the requested tiles
         for i, (lat, lon) in enumerate([(16, 79), (16, 80), (16, 81)]):
             tile_id = f"N{lat:02d}E{lon:03d}"
@@ -593,14 +621,16 @@ class TestDEMCacheHandling:
 
         # Verify acquire_dem was called only for missing tiles (2 tiles: 16,80 and 16,81)
         mock_acquire_dem.assert_called_once()
-        call_args = mock_acquire_dem.call_args[1]['tiles']
-        assert len(call_args) == 2
+        call_args = mock_acquire_dem.call_args[1]["tiles"]
+        assert len(call_args) == TEST_TILE_COUNT_TWO
         assert (16, 80) in call_args
         assert (16, 81) in call_args
         assert (16, 79) not in call_args  # This one was cached
 
     @patch("kshitij_model.pipeline.acquire_dem")
-    def test_dem_cache_disabled_acquires_all_tiles(self, mock_acquire_dem, tmp_path: Path):
+    def test_dem_cache_disabled_acquires_all_tiles(
+        self, mock_acquire_dem, tmp_path: Path
+    ):
         """Test that use_cached_dem=False acquires all requested tiles even if they exist.
         This test verifies that when use_cached_dem=False, all requested tiles are acquired.
         """
@@ -611,21 +641,30 @@ class TestDEMCacheHandling:
             tile_id = f"N{lat:02d}E{lon:03d}"
             _create_dummy_dem(
                 tile_dir / f"{tile_id}.tif",
-                100, 100,
-                from_bounds(lon, lat, lon + 1, lat + 1, 100, 100)
+                100,
+                100,
+                from_bounds(lon, lat, lon + 1, lat + 1, 100, 100),
             )
 
         # Create river vector
         river_path = tmp_path / "river.geojson"
         with river_path.open("w") as f:
-            json.dump({
-                "type": "FeatureCollection",
-                "features": [{
-                    "type": "Feature",
-                    "geometry": {"type": "LineString", "coordinates": [[79.5, 16.5], [80.5, 16.5]]},
-                    "properties": {"name": "Test River"}
-                }]
-            }, f)
+            json.dump(
+                {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "LineString",
+                                "coordinates": [[79.5, 16.5], [80.5, 16.5]],
+                            },
+                            "properties": {"name": "Test River"},
+                        }
+                    ],
+                },
+                f,
+            )
 
         # Mock acquire_dem to verify it's called with all tiles
         mock_manifest = MagicMock()
@@ -647,14 +686,13 @@ class TestDEMCacheHandling:
             use_cached_dem=False,
         )
 
-        from kshitij_model.pipeline import _ensure_dem_tiles, get_config
         dem_config = get_config()
         dem_config.study_tiles = [(16, 79), (16, 80), (16, 81)]
 
         tile_paths = _ensure_dem_tiles(config, dem_config)
 
         # Verify all three tiles are present
-        assert len(tile_paths) == 3
+        assert len(tile_paths) == TEST_TILE_COUNT
         # Verify the order matches the requested tiles
         for i, (lat, lon) in enumerate([(16, 79), (16, 80), (16, 81)]):
             tile_id = f"N{lat:02d}E{lon:03d}"
@@ -662,8 +700,8 @@ class TestDEMCacheHandling:
 
         # Verify acquire_dem was called for ALL tiles (not just missing ones)
         mock_acquire_dem.assert_called_once()
-        call_args = mock_acquire_dem.call_args[1]['tiles']
-        assert len(call_args) == 3
+        call_args = mock_acquire_dem.call_args[1]["tiles"]
+        assert len(call_args) == TEST_TILE_COUNT
         assert (16, 79) in call_args
         assert (16, 80) in call_args
         assert (16, 81) in call_args

@@ -42,6 +42,29 @@ from .river_mask import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Validation constants
+AOI_BOUNDS_LENGTH = 4
+LONGITUDE_MIN = -180.0
+LONGITUDE_MAX = 180.0
+LATITUDE_MIN = -90.0
+LATITUDE_MAX = 90.0
+
+# Error messages
+ERROR_WATER_LEVEL_REQUIRED = "water_level is required"
+ERROR_WATER_LEVEL_FINITE = "water_level must be finite"
+ERROR_RIVER_VECTOR_REQUIRED = "river_vector_path is required"
+ERROR_AOI_BOUNDS_LENGTH = "aoi_bounds must be (min_lon, min_lat, max_lon, max_lat)"
+ERROR_AOI_BOUNDS_FINITE = "aoi_bounds coordinates must be finite"
+ERROR_AOI_BOUNDS_MIN_LON = "aoi_bounds min_lon must be less than max_lon"
+ERROR_AOI_BOUNDS_MIN_LAT = "aoi_bounds min_lat must be less than max_lat"
+ERROR_AOI_BOUNDS_LONGITUDE = "aoi_bounds longitude must be in [-180, 180]"
+ERROR_AOI_BOUNDS_LATITUDE = "aoi_bounds latitude must be in [-90, 90]"
+ERROR_BUFFER_NEGATIVE = "river_buffer_meters must be non-negative"
+ERROR_BUFFER_FINITE = "river_buffer_meters must be finite"
+ERROR_DEM_TILES_MISSING = "DEM tiles still missing after acquisition: {missing}"
+ERROR_RIVER_MASK_FAILED = "River mask generation failed: {e}"
+ERROR_PIPELINE_FAILED = "Pipeline execution failed: {e}"
+
 
 class PipelineError(Exception):
     """Raised when pipeline execution fails."""
@@ -87,36 +110,34 @@ class PipelineConfig:
     def __post_init__(self):
         """Validate configuration."""
         if self.water_level is None:
-            raise PipelineConfigError("water_level is required")
+            raise PipelineConfigError(ERROR_WATER_LEVEL_REQUIRED)
         if not np.isfinite(self.water_level):
-            raise PipelineConfigError("water_level must be finite")
+            raise PipelineConfigError(ERROR_WATER_LEVEL_FINITE)
         if self.river_vector_path is None:
-            raise PipelineConfigError("river_vector_path is required")
+            raise PipelineConfigError(ERROR_RIVER_VECTOR_REQUIRED)
         if self.aoi_bounds is not None:
-            if len(self.aoi_bounds) != 4:
-                raise PipelineConfigError(
-                    "aoi_bounds must be (min_lon, min_lat, max_lon, max_lat)"
-                )
+            if len(self.aoi_bounds) != AOI_BOUNDS_LENGTH:
+                raise PipelineConfigError(ERROR_AOI_BOUNDS_LENGTH)
             min_lon, min_lat, max_lon, max_lat = self.aoi_bounds
             # Check for finite coordinates
             if not all(np.isfinite(c) for c in self.aoi_bounds):
-                raise PipelineConfigError("aoi_bounds coordinates must be finite")
+                raise PipelineConfigError(ERROR_AOI_BOUNDS_FINITE)
             # Check min/max ordering
             if min_lon >= max_lon:
-                raise PipelineConfigError("aoi_bounds min_lon must be less than max_lon")
+                raise PipelineConfigError(ERROR_AOI_BOUNDS_MIN_LON)
             if min_lat >= max_lat:
-                raise PipelineConfigError("aoi_bounds min_lat must be less than max_lat")
+                raise PipelineConfigError(ERROR_AOI_BOUNDS_MIN_LAT)
             # Check geographic bounds for WGS84
-            if min_lon < -180 or max_lon > 180:
-                raise PipelineConfigError("aoi_bounds longitude must be in [-180, 180]")
-            if min_lat < -90 or max_lat > 90:
-                raise PipelineConfigError("aoi_bounds latitude must be in [-90, 90]")
+            if min_lon < LONGITUDE_MIN or max_lon > LONGITUDE_MAX:
+                raise PipelineConfigError(ERROR_AOI_BOUNDS_LONGITUDE)
+            if min_lat < LATITUDE_MIN or max_lat > LATITUDE_MAX:
+                raise PipelineConfigError(ERROR_AOI_BOUNDS_LATITUDE)
 
         # Validate buffer distance
         if self.river_buffer_meters < 0:
-            raise PipelineConfigError("river_buffer_meters must be non-negative")
+            raise PipelineConfigError(ERROR_BUFFER_NEGATIVE)
         if not np.isfinite(self.river_buffer_meters):
-            raise PipelineConfigError("river_buffer_meters must be finite")
+            raise PipelineConfigError(ERROR_BUFFER_FINITE)
 
 
 @dataclass
@@ -154,7 +175,7 @@ def _ensure_dem_tiles(
     tile_paths = []
 
     if config.use_cached_dem:
-        acquisition = DEMAcquisition(
+        DEMAcquisition(
             cache_dir=config.cache_dir,
             raw_dir=config.raw_dir,
             config=dem_config,
@@ -195,7 +216,7 @@ def _ensure_dem_tiles(
             tile_path = Path(config.raw_dir) / f"{tile_id}.tif"
             if not tile_path.exists():
                 missing.append(tile_id)
-        raise PipelineError(f"DEM tiles still missing after acquisition: {missing}")
+        raise PipelineError(ERROR_DEM_TILES_MISSING.format(missing=missing))
 
     # Ensure paths are in the same order as requested tiles
     ordered_paths = []
@@ -419,14 +440,14 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             result.valid_cell_count,
         )
 
-        return result
-
     except (
         RiverMaskError,
         RiverVectorError,
         RiverGeometryError,
         RiverMaskEmptyError,
     ) as e:
-        raise PipelineError(f"River mask generation failed: {e}") from e
+        raise PipelineError(ERROR_RIVER_MASK_FAILED.format(e=e)) from e
     except Exception as e:
-        raise PipelineError(f"Pipeline execution failed: {e}") from e
+        raise PipelineError(ERROR_PIPELINE_FAILED.format(e=e)) from e
+    else:
+        return result

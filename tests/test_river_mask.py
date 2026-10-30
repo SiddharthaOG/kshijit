@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from rasterio.transform import from_bounds
+import rasterio
+from pyproj import CRS
+from rasterio.transform import Affine, from_bounds
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from kshitij_model.river_mask import (
     MissingDependencyError,
@@ -20,6 +25,11 @@ from kshitij_model.river_mask import (
     write_river_mask_geotiff,
 )
 
+# Test constants
+TEST_WIDTH = 100
+TEST_HEIGHT = 100
+TEST_NODATA = 255
+
 
 class TestCreateRiverMaskFromGeoJSONDict:
     """Tests for create_river_mask_from_geojson_dict using synthetic fixtures."""
@@ -28,8 +38,8 @@ class TestCreateRiverMaskFromGeoJSONDict:
         """Test rasterizing a simple LineString river."""
         # Reference grid: 100x100, bounds (0,0) to (10,10), 0.1 deg resolution
         transform = (0.1, 0.0, 0.0, 0.0, -0.1, 10.0)
-        width = 100
-        height = 100
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         # River runs horizontally through middle (y=5, i.e., row 50)
         geojson = {
@@ -62,8 +72,8 @@ class TestCreateRiverMaskFromGeoJSONDict:
     def test_multi_line_string_river(self):
         """Test rasterizing a MultiLineString river."""
         transform = (0.1, 0.0, 0.0, 0.0, -0.1, 10.0)
-        width = 100
-        height = 100
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         geojson = {
             "type": "FeatureCollection",
@@ -92,8 +102,8 @@ class TestCreateRiverMaskFromGeoJSONDict:
     def test_polygon_river(self):
         """Test rasterizing a Polygon river (wide river representation)."""
         transform = (0.1, 0.0, 0.0, 0.0, -0.1, 10.0)
-        width = 100
-        height = 100
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         geojson = {
             "type": "FeatureCollection",
@@ -128,8 +138,8 @@ class TestCreateRiverMaskFromGeoJSONDict:
     def test_all_touched_false(self):
         """Test all_touched=False only burns pixels with center in geometry."""
         transform = (0.1, 0.0, 0.0, 0.0, -0.1, 10.0)
-        width = 100
-        height = 100
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         # Use a polygon that clearly demonstrates the difference
         # A thin diagonal line where all_touched=True covers more pixels
@@ -258,13 +268,12 @@ class TestWriteRiverMaskGeoTIFF:
 
         assert output_path.exists()
         assert meta["crs"] == "EPSG:4326"
-        assert meta["width"] == 100
-        assert meta["height"] == 100
-        assert meta["nodata"] == 255
+        assert meta["width"] == TEST_WIDTH
+        assert meta["height"] == TEST_HEIGHT
+        assert meta["nodata"] == TEST_NODATA
         assert meta["dtype"] == "uint8"
 
         # Verify content
-        import rasterio
 
         with rasterio.open(output_path) as src:
             data = src.read(1)
@@ -399,9 +408,9 @@ class TestRiverBuffering:
         with geojson_path.open("w") as f:
             json.dump(geojson, f)
 
-        transform = from_bounds(0, 0, 10, 10, 100, 100)
-        width = 100
-        height = 100
+        transform = from_bounds(0, 0, 10, 10, TEST_WIDTH, TEST_HEIGHT)
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         # Test without buffer
         mask_no_buffer = rasterize_river_mask(
@@ -433,7 +442,6 @@ class TestRiverBuffering:
         """Test that buffering raises MissingDependencyError when dependencies unavailable."""
         # This test is a placeholder - in the actual environment, dependencies are available
         # The actual error is raised when BUFFERING_AVAILABLE is False
-        pass
 
     def test_negative_buffer_raises(self, tmp_path: Path):
         """Test that negative buffer distance raises RiverGeometryError."""
@@ -454,9 +462,11 @@ class TestRiverBuffering:
         with geojson_path.open("w") as f:
             json.dump(geojson, f)
 
-        transform = from_bounds(0, 0, 10, 10, 100, 100)
+        from_bounds(0, 0, 10, 10, TEST_WIDTH, TEST_HEIGHT)
 
-        with pytest.raises(RiverGeometryError, match="buffer_meters must be non-negative"):
+        with pytest.raises(
+            RiverGeometryError, match="buffer_meters must be non-negative"
+        ):
             rasterize_river_mask(
                 vector_path=tmp_path / "river.geojson",
                 reference_transform=(0.1, 0.0, 0.0, 0.0, -0.1, 10.0),
@@ -485,7 +495,7 @@ class TestRiverBuffering:
         with geojson_path.open("w") as f:
             json.dump(geojson, f)
 
-        transform = from_bounds(0, 0, 10, 10, 100, 100)
+        from_bounds(0, 0, 10, 10, TEST_WIDTH, TEST_HEIGHT)
 
         with pytest.raises(RiverGeometryError, match="buffer_meters must be finite"):
             rasterize_river_mask(
@@ -551,9 +561,9 @@ class TestRiverBuffering:
         with geojson_path.open("w") as f:
             json.dump(geojson, f)
 
-        transform = from_bounds(0, 0, 10, 10, 100, 100)
-        width = 100
-        height = 100
+        transform = from_bounds(0, 0, 10, 10, TEST_WIDTH, TEST_HEIGHT)
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         mask_no_buffer = rasterize_river_mask(
             vector_path=tmp_path / "river.geojson",
@@ -579,10 +589,14 @@ class TestRiverBuffering:
         # AND there should be cells that are True in buffered but False in unbuffered
         # (i.e., the buffered mask strictly includes the original)
         expanded = mask_with_buffer & ~mask_no_buffer
-        assert expanded.any(), "Buffered mask should include cells outside the original mask"
+        assert expanded.any(), (
+            "Buffered mask should include cells outside the original mask"
+        )
 
         # AND the original mask should be a subset of the buffered mask
-        assert (mask_no_buffer & ~mask_with_buffer).sum() == 0, "Buffered mask should include all original river cells"
+        assert (mask_no_buffer & ~mask_with_buffer).sum() == 0, (
+            "Buffered mask should include all original river cells"
+        )
 
     def test_buffering_in_projected_crs(self, tmp_path: Path):
         """Test that buffering works correctly in a projected CRS (UTM).
@@ -591,12 +605,10 @@ class TestRiverBuffering:
         (typically meters for UTM). This test verifies that buffering works correctly
         in a projected CRS and that the buffer distance is interpreted correctly.
         """
-        import pyproj
-        from pyproj import CRS
 
         # Create a UTM zone 44N CRS (EPSG:32644) - meters
         utm_crs = CRS.from_epsg(32644)
-        
+
         # Create a simple river in UTM coordinates (already in projected CRS)
         geojson = {
             "type": "FeatureCollection",
@@ -612,10 +624,8 @@ class TestRiverBuffering:
             ],
             "crs": {
                 "type": "name",
-                "properties": {
-                    "name": "urn:ogc:def:crs:EPSG::32644"
-                }
-            }
+                "properties": {"name": "urn:ogc:def:crs:EPSG::32644"},
+            },
         }
         geojson_path = tmp_path / "river_utm.geojson"
         with geojson_path.open("w") as f:
@@ -623,10 +633,9 @@ class TestRiverBuffering:
 
         # Create a transform for a 10km x 10km area at 100m resolution (100x100 pixels)
         # This covers roughly 500km to 510km in x, 0km to 10km in y in UTM
-        from rasterio.transform import Affine
         transform = Affine(100.0, 0.0, 500000.0, 0.0, -100.0, 10000.0)
-        width = 100
-        height = 100
+        width = TEST_WIDTH
+        height = TEST_HEIGHT
 
         # Test without buffer
         mask_no_buffer = rasterize_river_mask(
@@ -655,10 +664,11 @@ class TestRiverBuffering:
         # (500m / 100m per pixel = 5 pixels)
         # We don't assert exact pixel count since rasterization is approximate,
         # but it should be significantly larger
-        assert mask_with_buffer.sum() > mask_no_buffer.sum() * 2, "Buffer should significantly increase extent"
+        assert mask_with_buffer.sum() > mask_no_buffer.sum() * 2, (
+            "Buffer should significantly increase extent"
+        )
 
         # Verify the CRS is correctly handled (UTM uses meters)
-        from pyproj import CRS
         utm_crs = CRS.from_epsg(32644)
         assert utm_crs.axis_info[0].unit_name == "metre"
 

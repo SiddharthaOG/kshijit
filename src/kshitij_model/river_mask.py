@@ -58,6 +58,50 @@ class MissingDependencyError(RiverMaskError):
     """Raised when required dependency (fiona) is not installed."""
 
 
+# Error messages
+ERROR_FIONA_REQUIRED = (
+    "fiona is required to read vector files. "
+    "Install with 'pip install fiona' or use the 'river' extra."
+)
+ERROR_VECTOR_NOT_FOUND = "Vector file not found: {path}"
+ERROR_VECTOR_NO_FEATURES = "Vector file contains no features"
+ERROR_VECTOR_READ_FAILED = "Failed to read vector file {path}: {e}"
+ERROR_NO_VALID_GEOMETRIES = "No valid geometries found in vector file"
+ERROR_TRANSFORM_FAILED = (
+    "Failed to transform geometry from {src_crs} to {target_crs}: {e}"
+)
+ERROR_NO_RIVER_GEOMETRIES = "No river-like geometries (LineString, MultiLineString, Polygon, MultiPolygon) found"
+ERROR_BUFFER_NEGATIVE = "buffer_meters must be non-negative"
+ERROR_BUFFER_FINITE = "buffer_meters must be finite"
+ERROR_BUFFER_DEPS_MISSING = (
+    "pyproj and shapely are required for river buffering. "
+    "Install with 'pip install pyproj shapely' or use the 'river' extra."
+)
+ERROR_MASK_EMPTY = (
+    "Rasterized river mask contains no True cells. "
+    "Check that river geometry overlaps with DEM extent."
+)
+ERROR_MASK_EMPTY_SIMPLE = "Rasterized river mask contains no True cells"
+ERROR_NOT_FEATURE_COLLECTION = "Input must be a FeatureCollection"
+ERROR_VECTOR_READ_FAILED_FMT = "Failed to read vector file {path}: {e}"
+ERROR_TRANSFORM_FAILED_FMT = (
+    "Failed to transform geometry from {src_crs} to {target_crs}: {e}"
+)
+ERROR_NO_RIVER_GEOMETRIES_FMT = "No river-like geometries (LineString, MultiLineString, Polygon, MultiPolygon) found"
+ERROR_BUFFER_NEGATIVE_FMT = "buffer_meters must be non-negative"
+ERROR_BUFFER_FINITE_FMT = "buffer_meters must be finite"
+ERROR_BUFFER_DEPS_MISSING_FMT = (
+    "pyproj and shapely are required for river buffering. "
+    "Install with 'pip install pyproj shapely' or use the 'river' extra."
+)
+ERROR_MASK_EMPTY_FMT = (
+    "Rasterized river mask contains no True cells. "
+    "Check that river geometry overlaps with DEM extent."
+)
+ERROR_NOT_FEATURE_COLLECTION_FMT = "Input must be a FeatureCollection"
+ERROR_MASK_EMPTY_SIMPLE_FMT = "Rasterized river mask contains no True cells"
+
+
 def _read_vector_file(vector_path: Path | str) -> list[dict[str, Any]]:
     """Read geometries from a vector file (GeoJSON, GeoPackage, Shapefile).
 
@@ -72,20 +116,17 @@ def _read_vector_file(vector_path: Path | str) -> list[dict[str, Any]]:
         MissingDependencyError: If fiona is not installed.
     """
     if not FIONA_AVAILABLE:
-        raise MissingDependencyError(
-            "fiona is required to read vector files. "
-            "Install with 'pip install fiona' or use the 'river' extra."
-        )
+        raise MissingDependencyError(ERROR_FIONA_REQUIRED)
 
     vector_path = Path(vector_path)
     if not vector_path.exists():
-        raise RiverVectorError(f"Vector file not found: {vector_path}")
+        raise RiverVectorError(ERROR_VECTOR_NOT_FOUND.format(path=vector_path))
 
     features = []
     try:
         with fiona.open(vector_path) as src:
             if len(src) == 0:
-                raise RiverGeometryError("Vector file contains no features")
+                raise RiverGeometryError(ERROR_VECTOR_NO_FEATURES)  # noqa: TRY301
             # Check CRS
             src_crs = src.crs
             for feat in src:
@@ -99,10 +140,12 @@ def _read_vector_file(vector_path: Path | str) -> list[dict[str, Any]]:
                         }
                     )
     except Exception as e:
-        raise RiverVectorError(f"Failed to read vector file {vector_path}: {e}") from e
+        raise RiverVectorError(
+            ERROR_VECTOR_READ_FAILED_FMT.format(path=vector_path, e=e)
+        ) from e
 
     if not features:
-        raise RiverGeometryError("No valid geometries found in vector file")
+        raise RiverGeometryError(ERROR_NO_VALID_GEOMETRIES)
 
     return features
 
@@ -142,7 +185,9 @@ def _transform_geometries(
                 geom = transform_geom(src_crs, target_crs, geom)
             except Exception as e:
                 raise RiverGeometryError(
-                    f"Failed to transform geometry from {src_crs} to {target_crs}: {e}"
+                    ERROR_TRANSFORM_FAILED_FMT.format(
+                        src_crs=src_crs, target_crs=target_crs, e=e
+                    )
                 ) from e
         transformed.append({**feat, "geometry": geom})
 
@@ -181,14 +226,12 @@ def _filter_river_geometries(
                     river_features.append({**feat, "geometry": sub_geom})
 
     if not river_features:
-        raise RiverGeometryError(
-            "No river-like geometries (LineString, MultiLineString, Polygon, MultiPolygon) found"
-        )
+        raise RiverGeometryError(ERROR_NO_RIVER_GEOMETRIES_FMT)
 
     return river_features
 
 
-def rasterize_river_mask(
+def rasterize_river_mask(  # noqa: PLR0913, PLR0917, PLR0912
     vector_path: Path | str,
     reference_transform: Affine | tuple[float, ...],
     reference_width: int,
@@ -230,9 +273,9 @@ def rasterize_river_mask(
 
     # Validate buffer distance
     if buffer_meters < 0:
-        raise RiverGeometryError("buffer_meters must be non-negative")
+        raise RiverGeometryError(ERROR_BUFFER_NEGATIVE_FMT)
     if not np.isfinite(buffer_meters):
-        raise RiverGeometryError("buffer_meters must be finite")
+        raise RiverGeometryError(ERROR_BUFFER_FINITE_FMT)
 
     # Read vector file
     features = _read_vector_file(vector_path)
@@ -246,10 +289,7 @@ def rasterize_river_mask(
     # Apply buffer if requested
     if buffer_meters > 0:
         if not BUFFERING_AVAILABLE:
-            raise MissingDependencyError(
-                "pyproj and shapely are required for river buffering. "
-                "Install with 'pip install pyproj shapely' or use the 'river' extra."
-            )
+            raise MissingDependencyError(ERROR_BUFFER_DEPS_MISSING_FMT)
 
         # Create transformer for buffering in meters
         if reference_crs.is_geographic:
@@ -275,7 +315,9 @@ def rasterize_river_mask(
                 # Transform to projected CRS, buffer, transform back
                 geom_proj = shapely_transform(transformer.transform, geom)
                 geom_buffered = geom_proj.buffer(buffer_meters)
-                geom_back = shapely_transform(inverse_transformer.transform, geom_buffered)
+                geom_back = shapely_transform(
+                    inverse_transformer.transform, geom_buffered
+                )
                 buffered_geoms.append(geom_back.__geo_interface__)
             # Replace geometries with buffered versions
             for i, feat in enumerate(features):
@@ -290,8 +332,12 @@ def rasterize_river_mask(
                     buffer_distance = buffer_meters
                 else:
                     # For other units, convert using unit conversion factor
-                    unit_factor = getattr(reference_crs, 'linear_units_factor', 1.0)
-                    buffer_distance = buffer_meters / unit_factor if unit_factor > 0 else buffer_meters
+                    unit_factor = getattr(reference_crs, "linear_units_factor", 1.0)
+                    buffer_distance = (
+                        buffer_meters / unit_factor
+                        if unit_factor > 0
+                        else buffer_meters
+                    )
             else:
                 # Geographic CRS fallback - buffer_meters is already in meters
                 buffer_distance = buffer_meters
@@ -321,15 +367,12 @@ def rasterize_river_mask(
     bool_mask = mask.astype(bool)
 
     if not bool_mask.any():
-        raise RiverMaskEmptyError(
-            "Rasterized river mask contains no True cells. "
-            "Check that river geometry overlaps with DEM extent."
-        )
+        raise RiverMaskEmptyError(ERROR_MASK_EMPTY_FMT)
 
     return bool_mask
 
 
-def create_river_mask_from_geojson_dict(
+def create_river_mask_from_geojson_dict(  # noqa: PLR0913, PLR0917
     geojson_dict: dict[str, Any],
     reference_transform: Affine | tuple[float, ...],
     reference_width: int,
@@ -358,7 +401,7 @@ def create_river_mask_from_geojson_dict(
     reference_crs = CRS.from_user_input(reference_crs)
 
     if geojson_dict.get("type") != "FeatureCollection":
-        raise RiverGeometryError("Input must be a FeatureCollection")
+        raise RiverGeometryError(ERROR_NOT_FEATURE_COLLECTION_FMT)
 
     features = []
     for feat in geojson_dict.get("features", []):
@@ -389,7 +432,7 @@ def create_river_mask_from_geojson_dict(
     bool_mask = mask.astype(bool)
 
     if not bool_mask.any():
-        raise RiverMaskEmptyError("Rasterized river mask contains no True cells")
+        raise RiverMaskEmptyError(ERROR_MASK_EMPTY_SIMPLE_FMT)
 
     return bool_mask
 
