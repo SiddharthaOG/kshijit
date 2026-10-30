@@ -111,7 +111,7 @@ def _bounds_to_window(
     """
     # Convert geographic bounds to pixel window
     left, bottom, right, top = bounds
-    return from_bounds(left, bottom, right, top, transform=src.transform)
+    return windows_from_bounds(left, bottom, right, top, transform=src.transform)
 
 
 def crop_raster(  # noqa: PLR0913, PLR0917
@@ -152,7 +152,7 @@ def crop_raster(  # noqa: PLR0913, PLR0917
 
         # Calculate window for cropping
         left, bottom, right, top = bounds
-        window = from_bounds(left, bottom, right, top, transform=src.transform)
+        window = windows_from_bounds(left, bottom, right, top, transform=src.transform)
 
         # Read data within window
         data = src.read(1, window=window, masked=True)
