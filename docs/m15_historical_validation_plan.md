@@ -33,13 +33,13 @@
 | Copernicus DEM GLO-30 tiles (N16E079, N16E080, N16E081) | `data/raw/dem/` | GeoTIFF | ✅ Downloaded |
 | M1.4 pipeline implementation | `src/kshitij_model/pipeline.py` | Python | ✅ Complete |
 | M1.3 validation plan | `docs/m13_historical_validation_plan.md` | Markdown | ✅ Complete |
+| NRSC reference map (`AP_2024_13_09_Map.pdf`) | APSAC (https://apsac.ap.gov.in/wp-content/uploads/2024/09/AP_2024_13_09_Map.pdf) | PDF | ✅ **Acquired** (2026-10-30, 952 KB, SHA256: `6701a89a362ee78c7e2d3b3bd433c0c404724857b5cca1581e4498438ff27aab`) |
 
-### Assets Requiring Acquisition / Preparation
+### Assets Requiring Preparation
 
 | Asset | Source | Format | Status |
 |-------|--------|--------|--------|
-| NRSC reference map (`AP_2024_13_09_Map.pdf`) | APSAC (https://apsac.ap.gov.in/?page_id=7156) | PDF | ⬜ Not yet acquired |
-| Georeferenced reference inundation mask | Derived from PDF | GeoTIFF | ⬜ Pending digitisation |
+| Georeferenced reference inundation mask | Derived from PDF | GeoTIFF | ⬜ Pending georeferencing & digitisation |
 | Krishna River vector (OSM/HydroSHEDS) | OSM / HydroSHEDS | GeoJSON / GPKG | ⬜ Not yet extracted |
 | Krishna River gauge stage (13 Sep 2024) | CWC / Andhra Pradesh WRD | Time series (m) | ⬓ Unknown availability |
 
@@ -58,7 +58,9 @@ For reproducibility, the following must be recorded:
 ## C. Reference Map Preparation
 
 ### Current State
-- Source file: `AP_2024_13_09_Map.pdf` (952 KB, downloaded from APSAC)
+- Source file: `data/reference/AP_2024_13_09_Map.pdf` (952 KB, acquired 2026-10-30 from APSAC)
+- SHA256: `6701a89a362ee78c7e2d3b3bd433c0c404724857b5cca1581e4498438ff27aab`
+- PDF structure: 1 page, 2384×1684 pts, 37 embedded images, 2731 chars of text (place names in Vijayawada area)
 - Not yet georeferenced
 - Not yet digitised
 
@@ -292,11 +294,12 @@ M1.5 will use **Approach A (post-hoc sweep)** as primary, with clear documentati
 | # | Question | Impact | Resolution Path |
 |---|----------|--------|-----------------|
 | 1 | Is Krishna River gauge stage for 13 Sep 2024 available? | Enables Approach B (gauge-based) vs. only Approach A (sweep) | Contact CWC / AP WRD; check public portals |
-| 2 | Does NRSC PDF contain lat/lon grid or known landmarks? | Affects georeferencing accuracy | Inspect PDF in QGIS |
+| 2 | Does NRSC PDF contain lat/lon grid or known landmarks? | Affects georeferencing accuracy | **PDF inspected: contains 37 embedded images and 2731 chars of place-name text (Vijayawada area landmarks). No explicit lat/lon grid visible. GCPs must be derived from named landmarks cross-referenced with OSM/satellite imagery.** |
 | 3 | Is reference map extent fully within 3 acquired DEM tiles? | May need additional tiles (N15E080, N15E081, N17E080, N17E081) | Digitise extent first, then check |
 | 4 | Does Copernicus DEM EGM2008 vertical datum match Indian gauge datum? | Required for meaningful water-level comparison | Verify with CWC metadata |
 | 5 | Can river vector be reliably auto-extracted from OSM? | Manual extraction needed if not | Test Overpass API query |
 | 6 | What IoU threshold constitutes "acceptable" for this use case? | Defines acceptance criteria | Requires stakeholder input |
+| 7 | PDF georeferencing: no explicit grid/coordinates visible | GCPs must be manually identified from landmarks | Requires manual GCP collection in QGIS using OSM/satellite basemap |
 
 ---
 
