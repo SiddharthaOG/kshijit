@@ -605,7 +605,7 @@ class TestRiverBuffering:
                     "type": "Feature",
                     "geometry": {
                         "type": "LineString",
-                        "coordinates": [[500000.0, 0.0], [500010.0, 0.0]],
+                        "coordinates": [[500000.0, 5000.0], [500010.0, 5000.0]],
                     },
                     "properties": {},
                 }
