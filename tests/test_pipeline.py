@@ -338,14 +338,14 @@ class TestPipelineIntegration:
         }
 
         # Mock crop_raster to create actual file
-        def mock_crop_func(
-            _src_path,
+        def mock_crop_func(  # noqa: PLR0913, PLR0917
+            src_path,  # noqa: ARG001
             dst_path,
-            _bounds,
-            _nodata=None,
-            _dst_crs=None,
-            _dst_nodata=None,
-            _compression="lzw",
+            bounds,  # noqa: ARG001
+            nodata=None,  # noqa: ARG001
+            dst_crs=None,  # noqa: ARG001
+            dst_nodata=None,  # noqa: ARG001
+            compression="lzw",  # noqa: ARG001
         ):
             transform = from_bounds(80, 16, 82, 17, 200, 100)
             _create_dummy_dem(Path(dst_path), 200, 100, transform)
