@@ -63,6 +63,32 @@ class AcquisitionManifest:
 class DEMAcquisitionError(Exception):
     """Raised when DEM acquisition fails."""
 
+    @classmethod
+    def size_mismatch(
+        cls, tile_id: str, expected_size: int, actual_size: int
+    ) -> DEMAcquisitionError:
+        return cls(
+            f"Size mismatch for {tile_id}: expected {expected_size}, got {actual_size}"
+        )
+
+    @classmethod
+    def tile_not_found(cls, tile_id: str) -> DEMAcquisitionError:
+        return cls(f"Tile not found: {tile_id}")
+
+    @classmethod
+    def download_failed(
+        cls, tile_id: str, max_retries: int, err: Exception
+    ) -> DEMAcquisitionError:
+        return cls(f"Failed to download {tile_id} after {max_retries} attempts: {err}")
+
+    @classmethod
+    def exhausted_retries(cls, tile_id: str) -> DEMAcquisitionError:
+        return cls(f"Exhausted retries for {tile_id}")
+
+    @classmethod
+    def tile_not_available(cls, tile_id: str) -> DEMAcquisitionError:
+        return cls(f"Tile not available: {tile_id}")
+
 
 class DEMAcquisition:
     """Handles discovery, download, and verification of Copernicus DEM GLO-30 tiles."""
@@ -80,7 +106,7 @@ class DEMAcquisition:
         (16, 81),  # N16E081
     ]
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         cache_dir: str | Path = "data/cache",
         raw_dir: str | Path = "data/raw/dem",
@@ -136,16 +162,17 @@ class DEMAcquisition:
         key = self._s3_key(lat, lon)
         try:
             self.s3.head_object(Bucket=self.BUCKET, Key=key)
-            return True
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 return False
             raise
+        else:
+            return True
 
     def _compute_sha256(self, filepath: Path) -> str:
         """Compute SHA-256 hash of a file."""
         sha256 = hashlib.sha256()
-        with open(filepath, "rb") as f:
+        with filepath.open("rb") as f:
             for chunk in iter(lambda: f.read(8192), b""):
                 sha256.update(chunk)
         return sha256.hexdigest()
@@ -175,8 +202,8 @@ class DEMAcquisition:
                 # Verify file size
                 actual_size = dest.stat().st_size
                 if actual_size != expected_size:
-                    raise DEMAcquisitionError(
-                        f"Size mismatch for {tile_id}: expected {expected_size}, got {actual_size}"
+                    raise DEMAcquisitionError.size_mismatch(
+                        tile_id, expected_size, actual_size
                     )
 
                 # Compute checksum
@@ -196,20 +223,20 @@ class DEMAcquisition:
             except ClientError as e:
                 error_code = e.response["Error"]["Code"]
                 if error_code == "404":
-                    raise DEMAcquisitionError(f"Tile not found: {tile_id}")
+                    raise DEMAcquisitionError.tile_not_found(tile_id) from e
                 if attempt == self.max_retries:
-                    raise DEMAcquisitionError(
-                        f"Failed to download {tile_id} after {self.max_retries} attempts: {e}"
-                    )
+                    raise DEMAcquisitionError.download_failed(
+                        tile_id, self.max_retries, e
+                    ) from e
                 time.sleep(self.retry_delay * attempt)
             except OSError as e:
                 if attempt == self.max_retries:
-                    raise DEMAcquisitionError(
-                        f"Failed to download {tile_id} after {self.max_retries} attempts: {e}"
-                    )
+                    raise DEMAcquisitionError.download_failed(
+                        tile_id, self.max_retries, e
+                    ) from e
                 time.sleep(self.retry_delay * attempt)
 
-        raise DEMAcquisitionError(f"Exhausted retries for {tile_id}")
+        raise DEMAcquisitionError.exhausted_retries(tile_id)
 
     def acquire_study_area(
         self, tiles: list[tuple[int, int]] | None = None
@@ -226,30 +253,26 @@ class DEMAcquisition:
 
             # Check if already cached and valid
             if dest.exists() and cache_meta.exists():
-                with open(cache_meta) as f:
+                with cache_meta.open() as f:
                     cached = json.load(f)
                 if dest.exists() and dest.stat().st_size == cached["file_size"]:
                     # Verify checksum
                     sha256 = self._compute_sha256(dest)
                     if sha256 == cached["sha256"]:
-                        print(f"Using cached tile: {tile_id}")
                         tiles_info.append(DEMTileInfo(**cached))
                         total_size += cached["file_size"]
                         continue
 
             # Check if tile exists
             if not self._verify_tile_exists(lat, lon):
-                raise DEMAcquisitionError(
-                    f"Tile not available: {self._tile_id(lat, lon)}"
-                )
+                raise DEMAcquisitionError.tile_not_available(tile_id)
 
             # Download
-            print(f"Downloading tile: {self._tile_id(lat, lon)}...")
             tile_info = self._download_with_retries(lat, lon, dest)
 
             # Cache metadata
             cache_meta.parent.mkdir(parents=True, exist_ok=True)
-            with open(cache_meta, "w") as f:
+            with cache_meta.open("w") as f:
                 json.dump(tile_info, f, indent=2)
 
             tiles_info.append(DEMTileInfo(**tile_info))
@@ -269,7 +292,7 @@ class DEMAcquisition:
         # Save manifest
         manifest_path = self._manifest_path()
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(manifest_path, "w") as f:
+        with manifest_path.open("w") as f:
             json.dump(manifest.to_dict(), f, indent=2)
 
         return manifest
@@ -280,18 +303,16 @@ class DEMAcquisition:
         if not manifest_path.exists():
             return False
 
-        with open(manifest_path) as f:
+        with manifest_path.open() as f:
             manifest = json.load(f)
 
         for tile_data in manifest["tiles"]:
             path = Path(tile_data["local_path"])
             if not path.exists():
-                print(f"Missing file: {path}")
                 return False
 
             sha256 = self._compute_sha256(Path(tile_data["local_path"]))
             if sha256 != tile_data["sha256"]:
-                print(f"Checksum mismatch: {path}")
                 return False
 
         return True
