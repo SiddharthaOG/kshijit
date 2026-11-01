@@ -1,25 +1,28 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 *.egg-info/
-*.venv/
-.env
+.venv/
+.venv*/
 venv/
-.env.local
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+docker-compose/.env
 
 # Docker
-docker-compose/.env
+# (Keep Docker configuration files tracked)
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Render / deployment
+# Deployment
 render.yaml
 
-# Data files (keep out of git)
+# Geospatial data and reference files
 data/
 *.tif
 *.tiff
@@ -36,10 +39,14 @@ data/
 *.tmp
 *.temp
 
+# Test and lint artifacts
+.pytest-tmp/
+.pytest_cache/
+.ruff_cache/
+
 # Build artifacts
 dist/
 build/
-*.egg-info/
 
 # IDE
 .idea/

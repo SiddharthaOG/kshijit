@@ -67,16 +67,19 @@ class TestRasterInspection:
         ) as dst:
             dst.write(rng.random((TEST_WIDTH, TEST_HEIGHT)).astype(np.float32) * 100, 1)
 
-        # Inspect
-        meta = inspect_raster(temp_path)
+        try:
+            # Inspect
+            meta = inspect_raster(temp_path)
 
-        assert meta["crs"] == "EPSG:4326"
-        assert meta["width"] == TEST_WIDTH
-        assert meta["height"] == TEST_HEIGHT
-        assert meta["dtype"] == "float32"
-        assert meta["nodata"] == TEST_NODATA
-        assert meta["count"] == 1
-        assert meta["driver"] == "GTiff"
+            assert meta["crs"] == "EPSG:4326"
+            assert meta["width"] == TEST_WIDTH
+            assert meta["height"] == TEST_HEIGHT
+            assert meta["dtype"] == "float32"
+            assert meta["nodata"] == TEST_NODATA
+            assert meta["count"] == 1
+            assert meta["driver"] == "GTiff"
+        finally:
+            temp_path.unlink(missing_ok=True)
 
 
 class TestCropRaster:
