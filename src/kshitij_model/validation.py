@@ -21,6 +21,10 @@ from rasterio.warp import reproject
 
 # Constants
 MIN_COORDS_FOR_LINESTRING = 2
+OSM_ERROR_MSG = (
+    "No usable river geometries returned by Overpass API. "
+    "Check the query and try again."
+)
 
 
 @dataclass
@@ -351,9 +355,7 @@ def extract_krishna_river_from_osm(
       way["waterway"="river"]["name"="Krishna"]({min_lat},{min_lon},{max_lat},{max_lon});
       relation["waterway"="river"]["name"="Krishna"]({min_lat},{min_lon},{max_lat},{max_lon});
     );
-    out body;
-    >;
-    out skel qt;
+    out geom;
     """
 
     response = requests.post(
@@ -380,6 +382,9 @@ def extract_krishna_river_from_osm(
                         "properties": element.get("tags", {}),
                     }
                 )
+
+    if not features:
+        raise ValueError(OSM_ERROR_MSG)
 
     geojson = {
         "type": "FeatureCollection",

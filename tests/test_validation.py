@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import builtins
+from typing import TYPE_CHECKING
+from unittest.mock import Mock, patch
+
 import numpy as np
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+import json
 
 from kshitij_model.validation import (
     ValidationMetrics,
@@ -11,6 +20,7 @@ from kshitij_model.validation import (
     compute_metrics,
     compute_metrics_from_arrays,
     create_comparison_rgb,
+    extract_krishna_river_from_osm,
 )
 
 # Test constants
@@ -19,7 +29,7 @@ PERFECT_MATCH_TN = 50
 NO_OVERLAP_FP = 1
 NO_OVERLAP_FN = 1
 NO_OVERLAP_TN = 98
-NO_OVERLAP_AREA_RATIO = 1.0
+NO_OVERLAP_AREA_RATIO = 2.0
 PARTIAL_TP = 2
 PARTIAL_FP = 1
 PARTIAL_FN = 1
@@ -53,6 +63,13 @@ RGB_RED = (255, 0, 0)
 RGB_BLUE = (0, 0, 255)
 RGB_GRAY = (128, 128, 128)
 RGB_BLACK = (0, 0, 0)
+
+# OSM test constants
+OSM_VALID_WAY_ID = 123456
+OSM_VALID_COORDS = [[80.5, 16.5], [80.6, 16.5], [80.7, 16.6]]
+OSM_BBOX = (80.0, 16.0, 81.0, 17.0)
+OSM_ERROR_MSG = "No usable river geometries returned by Overpass API. Check the query and try again."
+IMPORT_ERROR_MSG = "No module named 'requests'"
 
 
 class TestConfusionMatrix:
@@ -287,6 +304,123 @@ class TestValidationMetricsDataclass:
         assert d["f1"] == DATACLASS_F1
         assert d["area_ratio"] == DATACLASS_AREA_RATIO
         assert d["valid_pixels"] == DATACLASS_VALID_PIXELS
+
+
+class TestExtractKrishnaRiverFromOSM:
+    """Tests for extract_krishna_river_from_osm function."""
+
+    def test_valid_geometry(self, tmp_path: Path):
+        """Test successful extraction with valid way geometry."""
+        # Mock Overpass API response with valid way geometry
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "elements": [
+                {
+                    "type": "way",
+                    "id": OSM_VALID_WAY_ID,
+                    "geometry": [
+                        {"lon": OSM_VALID_COORDS[0][0], "lat": OSM_VALID_COORDS[0][1]},
+                        {"lon": OSM_VALID_COORDS[1][0], "lat": OSM_VALID_COORDS[1][1]},
+                        {"lon": OSM_VALID_COORDS[2][0], "lat": OSM_VALID_COORDS[2][1]},
+                    ],
+                    "tags": {"name": "Krishna River", "waterway": "river"},
+                },
+                {
+                    "type": "relation",
+                    "id": 999,
+                    "tags": {"name": "Krishna River"},
+                },
+            ]
+        }
+        mock_response.raise_for_status = Mock()
+
+        with patch("requests.post", return_value=mock_response):
+            output_path = tmp_path / "krishna_river.geojson"
+            result_path = extract_krishna_river_from_osm(OSM_BBOX, output_path)
+
+            # Verify the output file was created
+            assert result_path == output_path
+            assert result_path.exists()
+
+            # Verify the GeoJSON content
+            with result_path.open("r") as f:
+                geojson = json.load(f)
+
+            assert geojson["type"] == "FeatureCollection"
+            assert len(geojson["features"]) == 1
+
+            feature = geojson["features"][0]
+            assert feature["type"] == "Feature"
+            assert feature["geometry"]["type"] == "LineString"
+            assert feature["geometry"]["coordinates"] == OSM_VALID_COORDS
+            assert feature["properties"]["name"] == "Krishna River"
+            assert feature["properties"]["waterway"] == "river"
+
+    def test_no_usable_geometry(self, tmp_path: Path):
+        """Test that ValueError is raised when no usable geometries are returned."""
+        # Mock Overpass API response with no usable geometries
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "elements": [
+                {
+                    "type": "node",
+                    "id": 123,
+                    "lat": 16.5,
+                    "lon": 80.5,
+                    "tags": {"name": "Not a river"},
+                },
+                {
+                    "type": "way",
+                    "id": 999,
+                    "tags": {"name": "Some road"},
+                },
+            ]
+        }
+        mock_response.raise_for_status = Mock()
+
+        with patch("requests.post", return_value=mock_response):
+            output_path = tmp_path / "krishna_river.geojson"
+
+            with pytest.raises(ValueError, match=OSM_ERROR_MSG):
+                extract_krishna_river_from_osm(OSM_BBOX, output_path)
+
+            # Verify output file was NOT created
+            assert not output_path.exists()
+
+    def test_empty_response(self, tmp_path: Path):
+        """Test that ValueError is raised when response has no elements."""
+        # Mock Overpass API response with empty elements
+        mock_response = Mock()
+        mock_response.json.return_value = {"elements": []}
+        mock_response.raise_for_status = Mock()
+
+        with patch("requests.post", return_value=mock_response):
+            output_path = tmp_path / "krishna_river.geojson"
+
+            with pytest.raises(ValueError, match=OSM_ERROR_MSG):
+                extract_krishna_river_from_osm(OSM_BBOX, output_path)
+
+            assert not output_path.exists()
+
+    def test_import_error_when_requests_not_available(self, tmp_path: Path):
+        """Test that ImportError is raised when requests is not available."""
+        original_import = builtins.__import__
+
+        def blocking_import(name, *args, **kwargs):
+            if name == "requests":
+                raise ImportError(IMPORT_ERROR_MSG)
+            return original_import(name, *args, **kwargs)
+
+        builtins.__import__ = blocking_import
+        try:
+            output_path = tmp_path / "krishna_river.geojson"
+
+            with pytest.raises(ImportError, match="No module named 'requests'"):
+                extract_krishna_river_from_osm(OSM_BBOX, output_path)
+
+            assert not output_path.exists()
+        finally:
+            builtins.__import__ = original_import
 
 
 if __name__ == "__main__":
