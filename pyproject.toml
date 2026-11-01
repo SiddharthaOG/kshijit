@@ -24,7 +24,7 @@ test = [
     "shapely>=2.0",
     "pyproj>=3.6",
 ]
-river = ["fiona>=1.9", "shapely>=2.0", "pyproj>=3.6"]
+river = ["fiona>=1.9", "shapely>=2.0", "pyproj>=3.6", "requests"]
 dem = ["boto3"]
 
 [tool.setuptools.packages.find]
