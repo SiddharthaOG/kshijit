@@ -1,61 +1,151 @@
 # Kshitij — Flood Risk Decision-Support Prototype
 
-**Milestone M0: Repository and Geospatial Foundation** — Configuration implemented, runtime verification pending  
-**Milestone M1.1: Synthetic-Terrain Flood-Connectivity Core** — Implemented and tested  
-
-**Status:** M0 configuration complete, M1.1 implemented and tested. Runtime verification of Docker/PostGIS pending.
-
----
-
-## Current Status Summary
-
-| Component | Status |
-|-----------|--------|
-| Repository structure, configuration, documentation | ✅ Implemented |
-| M1.1 flood-connectivity core (algorithm + tests) | ✅ Implemented & tested (42 tests pass) |
-| Docker Compose + PostgreSQL/PostGIS configuration | ✅ Configured |
-| Docker/PostGIS runtime verification | ⏳ Pending (requires Docker) |
-| Database smoke test | ⏳ Pending (requires Docker) |
-| M1.2+ DEM integration, rainfall, roads, alerting, MapLibre | 📋 Planned |
-
-> **⚠️ This application is for simulation and research purposes only—not for operational safety use.**  
-> It never sends real alerts and does not replace official forecasts from agencies such as IMD and CWC.
+**M0 — Repository and Geospatial Foundation:** Implemented  
+**M1.1 — Synthetic-Terrain Flood-Connectivity Core:** Implemented and tested  
+**M1.2 — Geospatial Processing Foundation:** Implemented  
+**M1.4 — Real-DEM Flood-Extent Pipeline:** Implemented  
+**M1.5 — Historical Reference Comparison and Validation:** In progress
 
 ---
 
 ## Project Overview
 
-Kshitij is a **research prototype** designed to help a human operator assess potential flood extents and road impacts using terrain, rainfall, and road data. The system combines these inputs with a threshold-connectivity flood model and presents estimates through a graduated, human-confirmed alert framework.
+Kshitij is a research prototype for exploring flood extent estimation and its potential implications for infrastructure and human decision-making.
 
-**Current capabilities (implemented):**
-- Synthetic-terrain flood-connectivity model with 4-neighbor BFS (`src/kshitij_model/connectivity.py`)
-- Strict input validation (elevation dtype, water_level type, source_mask Boolean)
-- 42 automated tests covering connectivity, edge cases, and input validation
-- Docker Compose configuration for PostgreSQL/PostGIS with health checks
-- Smoke test script for database connectivity and PostGIS verification
+The project combines terrain data, river geometry, and a threshold-connectivity flood model to estimate areas that may become inundated under specified water-level assumptions.
 
-**Planned / Not yet implemented:**
-- Real DEM integration and preprocessing (M1.2)
-- Historical rainfall ingestion from Open-Meteo
-- OpenStreetMap road network integration
-- Graduated alert engine with human confirmation workflow
-- MapLibre GL JS map interface
-- Real-world validation against 2024 Vijayawada flood event
+The long-term objective is to develop a reproducible geospatial decision-support workflow that can incorporate historical reference data and infrastructure information while keeping model limitations and uncertainty visible.
 
-> **⚠️ This application is for simulation and research purposes only—not for operational safety use.**  
-> It never sends real alerts and does not replace official forecasts from agencies such as IMD and CWC.
+**Important:** Kshitij is a research and simulation prototype. It is not an operational flood forecasting or early-warning system. Its outputs must not be used as a substitute for official forecasts, evacuation instructions, or warnings issued by agencies such as the IMD and CWC.
+
+---
+
+## Current Status
+
+| Component | Status |
+|---|---|
+| Repository structure and Python package configuration | Implemented |
+| Docker Compose and PostgreSQL/PostGIS configuration | Implemented |
+| M1.1 synthetic-terrain flood-connectivity algorithm | Implemented and tested |
+| Input validation and connectivity edge cases | Implemented and tested |
+| Geospatial raster preprocessing | Implemented |
+| DEM acquisition, caching, mosaicking, and cropping | Implemented |
+| River-vector processing and rasterization | Implemented |
+| Real-DEM flood-extent pipeline | Implemented |
+| Three-state flood-extent GeoTIFF output | Implemented |
+| Validation metrics and raster comparison utilities | Implemented |
+| OSM river-extraction groundwork | Implemented |
+| Georeferencing and digitization of the historical reference map | In progress |
+| Historical event comparison and model calibration | In progress |
+| Independent validation | Not yet established |
+| Road-impact analysis and alerting | Planned |
+| Map-based visualization interface | Planned |
+
+---
+
+## Implemented Capabilities
+
+### 1. Flood-Connectivity Model
+
+The core model estimates flood connectivity using a four-neighbour Breadth-First Search (BFS) approach.
+
+Starting from eligible source cells, the algorithm propagates through neighbouring cells that satisfy the specified elevation threshold.
+
+Implemented functionality includes:
+
+- Four-neighbour connectivity (up, down, left, right).
+- Elevation-threshold-based flood propagation.
+- Source-mask validation.
+- Input shape and dtype validation.
+- Handling of invalid and non-finite elevation values.
+- Protection against invalid water-level inputs.
+- Deterministic flood-connectivity results.
+
+The original synthetic-terrain implementation provides the algorithmic foundation for the real-DEM pipeline.
+
+### 2. Real-DEM Flood-Extent Pipeline — M1.4
+
+M1.4 extends the existing connectivity model to real geospatial elevation data.
+
+The pipeline integrates:
+
+1. **DEM acquisition:** Retrieves and caches the required Copernicus DEM GLO-30 tiles.
+2. **Mosaicking and cropping:** Combines the required elevation tiles and crops the resulting raster to the selected area of interest.
+3. **Raster preparation:** Prepares elevation data and validity information for processing.
+4. **River-mask generation:** Reads supplied river-vector data, transforms geometry into the raster coordinate system, applies the configured buffer, and rasterizes the result onto the DEM grid.
+5. **Flood computation:** Runs the existing connectivity algorithm using the generated river mask as the source mask.
+6. **Output generation:** Writes the resulting flood extent as a georeferenced raster.
+
+The flood-extent output uses three values:
+
+| Value | Meaning |
+|---|---|
+| `1` | Flooded cell |
+| `0` | Valid, non-flooded cell |
+| `255` | NoData / invalid cell |
+
+The pipeline is designed to reuse the existing connectivity implementation rather than introduce a separate flood-propagation algorithm.
+
+**Model limitation:** This is a static, elevation-threshold connectivity model. It does not simulate rainfall-runoff processes, fluid momentum, flow velocity, discharge, temporal flood propagation, or full hydrodynamic behaviour.
+
+A generated flood extent should therefore be interpreted as a terrain-based scenario estimate under specified assumptions, not as a physically complete flood simulation.
+
+### 3. Validation and Comparison Groundwork — M1.5
+
+The project includes utilities intended to support comparison between model outputs and historical reference data.
+
+Implemented groundwork includes:
+
+- Confusion-matrix metrics: TP, FP, FN, and TN.
+- Intersection over Union (IoU).
+- Precision, recall, and F1 score.
+- Area-ratio calculations.
+- Raster-alignment utilities.
+- RGB comparison and visualization utilities.
+- OpenStreetMap river-extraction utilities.
+
+These utilities provide the foundation for evaluating model outputs against a georeferenced reference map.
+
+The September 13, 2024 Vijayawada flood reference map is part of the planned historical comparison workflow.
+
+**Historical validation is not yet complete.** The reference map must first be georeferenced and converted into a suitable reference inundation mask. Model outputs must then be generated on a compatible grid before meaningful comparison can take place.
+
+Calibration against a reference event must also be distinguished from independent validation. Selecting parameters using a reference map and evaluating against that same map does not constitute independent validation.
+
+---
+
+## Technology and Data
+
+| Component | Technology / Data |
+|---|---|
+| Programming language | Python 3.12+ |
+| Numerical processing | NumPy |
+| Geospatial raster processing | Rasterio |
+| Elevation data | Copernicus DEM GLO-30 |
+| Vector processing | Fiona, Shapely |
+| Coordinate transformations | PyProj |
+| River data groundwork | OpenStreetMap |
+| Database | PostgreSQL |
+| Spatial database extension | PostGIS |
+| Containerization | Docker Compose |
+| Testing | pytest |
+| Linting and formatting | Ruff |
 
 ---
 
 ## Prerequisites
 
-### For Python development and testing (no Docker required)
-- Python 3.12+
-- [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-git)
+### Python development and testing
 
-### For database runtime verification (requires Docker)
-- [Docker](https://docs.docker.com/engine/install/) with Docker Compose v2+
-- [QGIS](https://qgis.org/en/site/forusers/download.html) (optional, for visual inspection of PostGIS data)
+- Python 3.12 or later
+- Git
+- pip
+
+### Optional database runtime verification
+
+- Docker
+- Docker Compose v2+
+- QGIS (optional, for inspecting geospatial outputs and PostGIS data)
 
 ---
 
@@ -64,161 +154,213 @@ Kshitij is a **research prototype** designed to help a human operator assess pot
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/SiddharthaOG/kshijit.git kshijit
+git clone https://github.com/SiddharthaOG/kshijit.git
 cd kshijit
 ```
 
-### 2. Python development setup (recommended for testing)
+### 2. Create a virtual environment
 
-```bash
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+**Windows PowerShell:**
 
-# Install package in development mode with test dependencies
-pip install -e ".[test]"
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
-### 3. Environment configuration (for Docker)
+**Linux / macOS:**
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install the project and development dependencies
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -e ".[test,river]"
+```
+
+The `test` and `river` extras install the dependencies required for the development test suite and river-vector processing.
+
+### 4. Configure environment variables for Docker
+
+Copy the example environment file:
+
+**Windows PowerShell:**
+
+```powershell
+Copy-Item .env.example .env
+```
+
+**Linux / macOS:**
 
 ```bash
 cp .env.example .env
-# Edit .env as needed. Default values are suitable for local development.
 ```
 
-### 4. Start the database (for runtime verification)
+Edit `.env` if you need to change the local database configuration.
+
+### 5. Start PostgreSQL/PostGIS
 
 ```bash
 docker compose up -d db
 ```
 
-This starts only the PostgreSQL/PostGIS service (`db`) with health checks. Wait for the health check to pass (check with `docker compose ps`).
-
-### 5. Run smoke test (after database is healthy)
+Check the database status:
 
 ```bash
-# Run smoke test against running database (exits with status code)
+docker compose ps
+```
+
+Wait until the database health check reports that the service is healthy.
+
+### 6. Run the database smoke test
+
+```bash
 docker compose run --rm smoke-test
 ```
 
-The smoke test runs as a one-off job. Its exit code indicates success (0) or failure (non-zero). Check the output for "All checks passed" or specific error messages.
+The smoke test checks database connectivity and PostGIS availability. A successful run exits with status code `0`.
 
-### 6. Stop services
+### 7. Stop the database
 
 ```bash
 docker compose down
 ```
 
-### 6. Inspect with QGIS (optional)
+---
 
-Connect QGIS to the local PostGIS database:
-- Host: `127.0.0.1` (database port published to localhost only)
-- Port: `5432`
-- Database: `kshitij_db` (or value from `.env`)
-- User: `kshitij_dev` (or value from `.env`)
-- Password: (from `.env`)
-- Check "Enable PostGIS connections"
+## Development Commands
+
+| Action | Command |
+|---|---|
+| Install development dependencies | `python -m pip install -e ".[test,river]"` |
+| Run the test suite | `python -m pytest -v` |
+| Run Ruff lint checks | `python -m ruff check src/ tests/` |
+| Check formatting | `python -m ruff format --check src/ tests/` |
+| Start PostgreSQL/PostGIS | `docker compose up -d db` |
+| Stop Docker services | `docker compose down` |
+| View Docker logs | `docker compose logs -f` |
+| Run database smoke test | `docker compose run --rm smoke-test` |
+
+The Python test suite does not require Docker. Database smoke testing requires Docker and a running database service.
 
 ---
 
 ## Environment Configuration
 
-Copy `.env.example` to `.env` and adjust:
+The Docker database configuration is controlled through `.env`.
 
 | Variable | Default | Description |
-| -------- | -------- | ----------- |
-| `POSTGRES_USER` | `kshitij_dev` | Database superuser |
-| `POSTGRES_PASSWORD` | `dev_password_must_change` | Database password |
+|---|---|---|
+| `POSTGRES_USER` | `kshitij_dev` | Database user |
+| `POSTGRES_PASSWORD` | `dev_password_must_change` | Local development password |
 | `POSTGRES_DB` | `kshitij_db` | Database name |
-| `POSTGRES_HOST` | `db` | Docker Compose service name (for inter-container) |
+| `POSTGRES_HOST` | `db` | Docker Compose database service |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `DEBUG` | `True` | App debug mode |
-| `SECRET_KEY` | `dev_secret_key_replace_me` | Secret key for development |
+| `DEBUG` | `True` | Development debug setting |
+| `SECRET_KEY` | `dev_secret_key_replace_me` | Development secret key |
+
+Use appropriate secrets for any deployment beyond local development. Do not commit `.env` files or credentials.
 
 ---
 
-## Commands Reference
+## Testing and Code Quality
 
-| Action | Command |
-| -------- | -------- |
-| Start database | `docker compose up -d db` |
-| Stop services | `docker compose down` |
-| View logs | `docker compose logs -f` |
-| Rebuild images | `docker compose build` |
-| Run database smoke test | `docker compose run --rm smoke-test` |
-| Connect QGIS | See "Inspect with QGIS" section |
-| **Run Python tests (no Docker)** | `python -m pytest -v` |
-| Install dev dependencies | `pip install -e ".[test]"` |
+The project uses pytest for automated testing and Ruff for linting and formatting.
 
----
+The test suite covers the flood-connectivity algorithm, geospatial processing, input validation, pipeline behaviour, river-mask generation, and validation utilities.
 
-## Troubleshooting
-
-| Issue | Resolution |
-| -------- | ----------- |
-| `db` service won't start | Check Docker resources; ensure no other service occupies port 5432 on 127.0.0.1 |
-| Smoke test fails | Verify `.env` values; check `docker compose logs db` and `docker compose logs smoke-test` for errors |
-| Smoke test not running | Run `docker compose run --rm smoke-test` manually after `db` is healthy |
-| QGIS can't connect | Confirm `db` service is running; verify `.env` credentials; use host `127.0.0.1` |
-| `psycopg2` import error in tests | Run `pip install -e ".[test]"` to install test dependencies |
-| Python tests fail | Ensure virtual environment is activated and `pip install -e ".[test]"` was run |
-
----
-
-## Test Suite
-
-The project includes a comprehensive test suite for the M1.1 flood-connectivity core:
+Run the complete test suite:
 
 ```bash
-# Run all tests (no Docker required)
 python -m pytest -v
 ```
 
-**Current test coverage:** 42 tests covering:
-- Core connectivity algorithm (corridors, isolated depressions, barriers, diagonal rules)
-- Edge cases (NaN, ±inf elevation barriers, multiple sources, max water level)
-- Input validation (dtype, shape, water_level type, overflow)
-- Property tests (monotonicity, flooded-cell validity, input immutability, water-level precision)
+Run lint checks:
+
+```bash
+python -m ruff check src/ tests/
+```
+
+Check formatting:
+
+```bash
+python -m ruff format --check src/ tests/
+```
+
+The repository also uses GitHub Actions to run automated checks on changes submitted through the GitHub workflow.
 
 ---
 
-## Implemented / Planned / Not Started
+## Project Roadmap
 
-| Category | Status |
-| -------- | -------- |
-| **Implemented** | Repository structure, Docker Compose config, M1.1 flood-connectivity core (algorithm + 42 tests), documentation |
-| **Runtime-verified** | Python test suite (42/42 passing) |
-| **Pending runtime verification** | Docker/PostGIS startup, database smoke test (requires Docker) |
-| **Planned (M1.2+)** | Real DEM integration, rainfall ingestion, road network, alert engine, MapLibre interface |
+| Milestone | Scope | Status |
+|---|---|---|
+| M0 | Repository structure, configuration, Docker/PostGIS foundation | Implemented |
+| M1.1 | Synthetic-terrain flood-connectivity algorithm | Implemented |
+| M1.2 | Geospatial processing foundation | Implemented |
+| M1.4 | Real-DEM flood-extent pipeline | Implemented |
+| M1.5 | Historical reference comparison, validation, and calibration | In progress |
+| Future | Road-network impact analysis | Planned |
+| Future | Graduated alert framework with human confirmation | Planned |
+| Future | Interactive map-based visualization | Planned |
+
+Milestone numbering reflects the project's development plan; it does not imply that every intermediate milestone has been independently released.
+
+---
+
+## Scientific Limitations and Intended Use
+
+Kshitij is intended for research, experimentation, and development of geospatial flood-risk analysis workflows.
+
+Its current flood model:
+
+- Uses terrain elevation and a specified water-level threshold.
+- Relies on connectivity from designated source cells.
+- Does not solve the shallow-water equations.
+- Does not model time-dependent water movement or flow velocity.
+- Does not independently establish the accuracy of a real-world flood prediction.
+
+Historical comparisons can help assess how closely a selected model configuration corresponds to a reference inundation map. They do not, by themselves, establish operational forecasting capability.
+
+All results should be interpreted with these limitations in mind.
 
 ---
 
 ## Repository Structure
 
-```
+The repository is organized around the Python package, its geospatial processing modules, tests, documentation, and Docker configuration.
+
+```text
 kshitij/
-├── .gitignore
-├── .env.example
-├── compose.yaml
-├── pyproject.toml
-├── Dockerfile
-├── requirements.txt
+├── .github/
+│   └── workflows/
+├── docker-compose/
+├── docs/
 ├── scripts/
-│   └── smoke_test.py
 ├── src/
 │   └── kshitij_model/
-│       ├── __init__.py
-│       └── connectivity.py
-├── docs/
-│   ├── DEVELOPMENT.md
-│   └── DATA_SOURCES.md
+│       ├── connectivity.py
+│       ├── pipeline.py
+│       ├── raster_preprocessing.py
+│       ├── river_mask.py
+│       └── validation.py
 ├── tests/
-│   └── test_connectivity.py
+├── .env.example
+├── .gitignore
+├── compose.yaml
+├── Dockerfile
+├── pyproject.toml
+├── requirements.txt
 └── README.md
 ```
+
+This is a high-level structural overview; individual modules and supporting files may evolve as development continues.
 
 ---
 
 ## License
 
-This project is for research and simulation purposes only.
+This project is intended for research and simulation purposes. Refer to the repository's license information for applicable terms.
